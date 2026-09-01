@@ -1,0 +1,19 @@
+# Secrets
+.env
+.env.local
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+client/dist/
+server/data/audit.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+!server/data/.gitkeep

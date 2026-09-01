@@ -1,0 +1,542 @@
+[
+  {
+    "id": "shopper_044",
+    "bucket": "infeasible",
+    "itemPrice": 87198,
+    "statedBudget": 3048,
+    "takeHomePay": 23101,
+    "existingObligations": 12231,
+    "otherExpenses": 14854
+  },
+  {
+    "id": "shopper_045",
+    "bucket": "infeasible",
+    "itemPrice": 31895,
+    "statedBudget": 1273,
+    "takeHomePay": 35179,
+    "existingObligations": 15840,
+    "otherExpenses": 7819
+  },
+  {
+    "id": "shopper_024",
+    "bucket": "tight",
+    "itemPrice": 49831,
+    "statedBudget": 2857,
+    "takeHomePay": 47591,
+    "existingObligations": 5189,
+    "otherExpenses": 11062
+  },
+  {
+    "id": "shopper_015",
+    "bucket": "comfortable",
+    "itemPrice": 77792,
+    "statedBudget": 9237,
+    "takeHomePay": 47569,
+    "existingObligations": 13013,
+    "otherExpenses": 23917
+  },
+  {
+    "id": "shopper_028",
+    "bucket": "tight",
+    "itemPrice": 39626,
+    "statedBudget": 2348,
+    "takeHomePay": 45188,
+    "existingObligations": 11861,
+    "otherExpenses": 11866
+  },
+  {
+    "id": "shopper_040",
+    "bucket": "infeasible",
+    "itemPrice": 39574,
+    "statedBudget": 799,
+    "takeHomePay": 27870,
+    "existingObligations": 12817,
+    "otherExpenses": 5323
+  },
+  {
+    "id": "shopper_038",
+    "bucket": "infeasible",
+    "itemPrice": 55386,
+    "statedBudget": 1604,
+    "takeHomePay": 23079,
+    "existingObligations": 10809,
+    "otherExpenses": 12807
+  },
+  {
+    "id": "shopper_008",
+    "bucket": "comfortable",
+    "itemPrice": 66102,
+    "statedBudget": 8593,
+    "takeHomePay": 67545,
+    "existingObligations": 11047,
+    "otherExpenses": 16196
+  },
+  {
+    "id": "shopper_036",
+    "bucket": "infeasible",
+    "itemPrice": 47031,
+    "statedBudget": 1241,
+    "takeHomePay": 24734,
+    "existingObligations": 10715,
+    "otherExpenses": 13675
+  },
+  {
+    "id": "shopper_039",
+    "bucket": "infeasible",
+    "itemPrice": 89489,
+    "statedBudget": 2326,
+    "takeHomePay": 30843,
+    "existingObligations": 13098,
+    "otherExpenses": 14132
+  },
+  {
+    "id": "shopper_047",
+    "bucket": "no_budget",
+    "itemPrice": 61119,
+    "statedBudget": null,
+    "takeHomePay": 64725,
+    "existingObligations": 4840,
+    "otherExpenses": 14767
+  },
+  {
+    "id": "shopper_017",
+    "bucket": "tight",
+    "itemPrice": 16847,
+    "statedBudget": 957,
+    "takeHomePay": 29830,
+    "existingObligations": 10748,
+    "otherExpenses": 7657
+  },
+  {
+    "id": "shopper_013",
+    "bucket": "comfortable",
+    "itemPrice": 27257,
+    "statedBudget": 2546,
+    "takeHomePay": 76020,
+    "existingObligations": 12667,
+    "otherExpenses": 19070
+  },
+  {
+    "id": "shopper_034",
+    "bucket": "infeasible",
+    "itemPrice": 32628,
+    "statedBudget": 1254,
+    "takeHomePay": 20626,
+    "existingObligations": 18163,
+    "otherExpenses": 7908
+  },
+  {
+    "id": "shopper_025",
+    "bucket": "tight",
+    "itemPrice": 41678,
+    "statedBudget": 2265,
+    "takeHomePay": 32163,
+    "existingObligations": 5477,
+    "otherExpenses": 14202
+  },
+  {
+    "id": "shopper_018",
+    "bucket": "tight",
+    "itemPrice": 52708,
+    "statedBudget": 2889,
+    "takeHomePay": 41305,
+    "existingObligations": 6725,
+    "otherExpenses": 19070
+  },
+  {
+    "id": "shopper_035",
+    "bucket": "infeasible",
+    "itemPrice": 79287,
+    "statedBudget": 1876,
+    "takeHomePay": 34758,
+    "existingObligations": 19990,
+    "otherExpenses": 11717
+  },
+  {
+    "id": "shopper_005",
+    "bucket": "comfortable",
+    "itemPrice": 62037,
+    "statedBudget": 7353,
+    "takeHomePay": 47077,
+    "existingObligations": 16657,
+    "otherExpenses": 22457
+  },
+  {
+    "id": "shopper_010",
+    "bucket": "comfortable",
+    "itemPrice": 43091,
+    "statedBudget": 5159,
+    "takeHomePay": 84957,
+    "existingObligations": 7832,
+    "otherExpenses": 20928
+  },
+  {
+    "id": "shopper_023",
+    "bucket": "tight",
+    "itemPrice": 39364,
+    "statedBudget": 1985,
+    "takeHomePay": 39641,
+    "existingObligations": 14969,
+    "otherExpenses": 8441
+  },
+  {
+    "id": "shopper_026",
+    "bucket": "tight",
+    "itemPrice": 52260,
+    "statedBudget": 2767,
+    "takeHomePay": 54531,
+    "existingObligations": 10580,
+    "otherExpenses": 12831
+  },
+  {
+    "id": "shopper_043",
+    "bucket": "infeasible",
+    "itemPrice": 40494,
+    "statedBudget": 1074,
+    "takeHomePay": 21598,
+    "existingObligations": 19105,
+    "otherExpenses": 12259
+  },
+  {
+    "id": "shopper_003",
+    "bucket": "comfortable",
+    "itemPrice": 37067,
+    "statedBudget": 4752,
+    "takeHomePay": 76505,
+    "existingObligations": 17470,
+    "otherExpenses": 16021
+  },
+  {
+    "id": "shopper_058",
+    "bucket": "no_budget",
+    "itemPrice": 21528,
+    "statedBudget": null,
+    "takeHomePay": 25827,
+    "existingObligations": 14953,
+    "otherExpenses": 13116
+  },
+  {
+    "id": "shopper_042",
+    "bucket": "infeasible",
+    "itemPrice": 54331,
+    "statedBudget": 1259,
+    "takeHomePay": 21145,
+    "existingObligations": 9732,
+    "otherExpenses": 11515
+  },
+  {
+    "id": "shopper_059",
+    "bucket": "no_budget",
+    "itemPrice": 46955,
+    "statedBudget": null,
+    "takeHomePay": 26885,
+    "existingObligations": 16724,
+    "otherExpenses": 13732
+  },
+  {
+    "id": "shopper_012",
+    "bucket": "comfortable",
+    "itemPrice": 25173,
+    "statedBudget": 2189,
+    "takeHomePay": 55072,
+    "existingObligations": 9498,
+    "otherExpenses": 19742
+  },
+  {
+    "id": "shopper_002",
+    "bucket": "comfortable",
+    "itemPrice": 55899,
+    "statedBudget": 4476,
+    "takeHomePay": 67550,
+    "existingObligations": 7528,
+    "otherExpenses": 22007
+  },
+  {
+    "id": "shopper_052",
+    "bucket": "no_budget",
+    "itemPrice": 25294,
+    "statedBudget": null,
+    "takeHomePay": 72328,
+    "existingObligations": 7983,
+    "otherExpenses": 16976
+  },
+  {
+    "id": "shopper_014",
+    "bucket": "comfortable",
+    "itemPrice": 47839,
+    "statedBudget": 6128,
+    "takeHomePay": 42506,
+    "existingObligations": 19581,
+    "otherExpenses": 8341
+  },
+  {
+    "id": "shopper_048",
+    "bucket": "no_budget",
+    "itemPrice": 30654,
+    "statedBudget": null,
+    "takeHomePay": 50936,
+    "existingObligations": 9315,
+    "otherExpenses": 18498
+  },
+  {
+    "id": "shopper_037",
+    "bucket": "infeasible",
+    "itemPrice": 78708,
+    "statedBudget": 3123,
+    "takeHomePay": 37407,
+    "existingObligations": 18555,
+    "otherExpenses": 11900
+  },
+  {
+    "id": "shopper_009",
+    "bucket": "comfortable",
+    "itemPrice": 37473,
+    "statedBudget": 3111,
+    "takeHomePay": 49290,
+    "existingObligations": 18597,
+    "otherExpenses": 20603
+  },
+  {
+    "id": "shopper_049",
+    "bucket": "no_budget",
+    "itemPrice": 24836,
+    "statedBudget": null,
+    "takeHomePay": 52798,
+    "existingObligations": 11429,
+    "otherExpenses": 8498
+  },
+  {
+    "id": "shopper_004",
+    "bucket": "comfortable",
+    "itemPrice": 34340,
+    "statedBudget": 4573,
+    "takeHomePay": 41392,
+    "existingObligations": 8228,
+    "otherExpenses": 18770
+  },
+  {
+    "id": "shopper_054",
+    "bucket": "no_budget",
+    "itemPrice": 53583,
+    "statedBudget": null,
+    "takeHomePay": 20666,
+    "existingObligations": 15484,
+    "otherExpenses": 9437
+  },
+  {
+    "id": "shopper_032",
+    "bucket": "infeasible",
+    "itemPrice": 56541,
+    "statedBudget": 1529,
+    "takeHomePay": 33529,
+    "existingObligations": 14949,
+    "otherExpenses": 11591
+  },
+  {
+    "id": "shopper_029",
+    "bucket": "tight",
+    "itemPrice": 18887,
+    "statedBudget": 985,
+    "takeHomePay": 49876,
+    "existingObligations": 14541,
+    "otherExpenses": 17421
+  },
+  {
+    "id": "shopper_007",
+    "bucket": "comfortable",
+    "itemPrice": 15498,
+    "statedBudget": 1955,
+    "takeHomePay": 86050,
+    "existingObligations": 5194,
+    "otherExpenses": 13408
+  },
+  {
+    "id": "shopper_050",
+    "bucket": "no_budget",
+    "itemPrice": 41134,
+    "statedBudget": null,
+    "takeHomePay": 53503,
+    "existingObligations": 9764,
+    "otherExpenses": 10019
+  },
+  {
+    "id": "shopper_057",
+    "bucket": "no_budget",
+    "itemPrice": 15674,
+    "statedBudget": null,
+    "takeHomePay": 29135,
+    "existingObligations": 17785,
+    "otherExpenses": 13603
+  },
+  {
+    "id": "shopper_022",
+    "bucket": "tight",
+    "itemPrice": 32677,
+    "statedBudget": 1647,
+    "takeHomePay": 35499,
+    "existingObligations": 14549,
+    "otherExpenses": 13330
+  },
+  {
+    "id": "shopper_055",
+    "bucket": "no_budget",
+    "itemPrice": 39937,
+    "statedBudget": null,
+    "takeHomePay": 18379,
+    "existingObligations": 15401,
+    "otherExpenses": 19846
+  },
+  {
+    "id": "shopper_001",
+    "bucket": "comfortable",
+    "itemPrice": 38991,
+    "statedBudget": 3623,
+    "takeHomePay": 43366,
+    "existingObligations": 6146,
+    "otherExpenses": 12746
+  },
+  {
+    "id": "shopper_011",
+    "bucket": "comfortable",
+    "itemPrice": 73786,
+    "statedBudget": 8249,
+    "takeHomePay": 37092,
+    "existingObligations": 5207,
+    "otherExpenses": 23652
+  },
+  {
+    "id": "shopper_031",
+    "bucket": "infeasible",
+    "itemPrice": 67040,
+    "statedBudget": 1325,
+    "takeHomePay": 24028,
+    "existingObligations": 17773,
+    "otherExpenses": 14304
+  },
+  {
+    "id": "shopper_006",
+    "bucket": "comfortable",
+    "itemPrice": 34969,
+    "statedBudget": 2995,
+    "takeHomePay": 39687,
+    "existingObligations": 10326,
+    "otherExpenses": 18152
+  },
+  {
+    "id": "shopper_027",
+    "bucket": "tight",
+    "itemPrice": 31863,
+    "statedBudget": 1814,
+    "takeHomePay": 26300,
+    "existingObligations": 7784,
+    "otherExpenses": 16011
+  },
+  {
+    "id": "shopper_016",
+    "bucket": "tight",
+    "itemPrice": 54201,
+    "statedBudget": 3271,
+    "takeHomePay": 25485,
+    "existingObligations": 15276,
+    "otherExpenses": 6219
+  },
+  {
+    "id": "shopper_046",
+    "bucket": "no_budget",
+    "itemPrice": 53143,
+    "statedBudget": null,
+    "takeHomePay": 75315,
+    "existingObligations": 5166,
+    "otherExpenses": 16693
+  },
+  {
+    "id": "shopper_056",
+    "bucket": "no_budget",
+    "itemPrice": 53231,
+    "statedBudget": null,
+    "takeHomePay": 26350,
+    "existingObligations": 17061,
+    "otherExpenses": 19056
+  },
+  {
+    "id": "shopper_020",
+    "bucket": "tight",
+    "itemPrice": 54247,
+    "statedBudget": 2946,
+    "takeHomePay": 27085,
+    "existingObligations": 8947,
+    "otherExpenses": 19817
+  },
+  {
+    "id": "shopper_021",
+    "bucket": "tight",
+    "itemPrice": 52137,
+    "statedBudget": 2757,
+    "takeHomePay": 43073,
+    "existingObligations": 8679,
+    "otherExpenses": 9167
+  },
+  {
+    "id": "shopper_033",
+    "bucket": "infeasible",
+    "itemPrice": 39503,
+    "statedBudget": 1524,
+    "takeHomePay": 38180,
+    "existingObligations": 9806,
+    "otherExpenses": 13895
+  },
+  {
+    "id": "shopper_030",
+    "bucket": "tight",
+    "itemPrice": 21890,
+    "statedBudget": 1266,
+    "takeHomePay": 48262,
+    "existingObligations": 8900,
+    "otherExpenses": 6648
+  },
+  {
+    "id": "shopper_041",
+    "bucket": "infeasible",
+    "itemPrice": 68296,
+    "statedBudget": 2571,
+    "takeHomePay": 36079,
+    "existingObligations": 17445,
+    "otherExpenses": 12731
+  },
+  {
+    "id": "shopper_053",
+    "bucket": "no_budget",
+    "itemPrice": 20042,
+    "statedBudget": null,
+    "takeHomePay": 75559,
+    "existingObligations": 10488,
+    "otherExpenses": 17716
+  },
+  {
+    "id": "shopper_051",
+    "bucket": "no_budget",
+    "itemPrice": 27999,
+    "statedBudget": null,
+    "takeHomePay": 75172,
+    "existingObligations": 10232,
+    "otherExpenses": 14390
+  },
+  {
+    "id": "shopper_060",
+    "bucket": "no_budget",
+    "itemPrice": 33942,
+    "statedBudget": null,
+    "takeHomePay": 23788,
+    "existingObligations": 10223,
+    "otherExpenses": 6140
+  },
+  {
+    "id": "shopper_019",
+    "bucket": "tight",
+    "itemPrice": 21849,
+    "statedBudget": 1189,
+    "takeHomePay": 26860,
+    "existingObligations": 14845,
+    "otherExpenses": 18803
+  }
+]
