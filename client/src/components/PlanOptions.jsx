@@ -80,16 +80,17 @@ export default function PlanOptions({ result }) {
               Total you pay: ₹{opt.totalPaid?.toLocaleString('en-IN')}
               {facts.monthlyHeadroom != null && <> · Headroom: ₹{facts.monthlyHeadroom.toLocaleString('en-IN')}/mo</>}
             </div>
-            <div style={{ marginTop: 12, padding: 10, background: idx === 0 ? '#f0f7ff' : '#fffbeb', border: '1px solid ' + (idx === 0 ? '#bfdbfe' : '#fde68a'), borderRadius: 8 }}>
-              <div style={{ fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: idx === 0 ? '#1e40af' : '#92400e', marginBottom: 4 }}>
-                Why this plan? <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>({facts.reason || 'alternative'})</span>
+            <div style={{ marginTop: 14, padding: 12, background: idx === 0 ? '#f0f7ff' : '#fffbeb', border: '1px solid ' + (idx === 0 ? '#bfdbfe' : '#fde68a'), borderRadius: 8 }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: idx === 0 ? '#1e40af' : '#92400e', marginBottom: 8 }}>
+                Why this plan?
               </div>
-              <div style={{ fontSize: '0.88rem', lineHeight: 1.5, color: '#1f2937' }}>
-                {facts.reasonLabel || `Tenure ${opt.tenorMonths} months at ₹${opt.emi.toLocaleString('en-IN')}/mo fits your ₹${targetMonthlyPayment.toLocaleString('en-IN')} budget.`}
-              </div>
-              <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: 6 }}>
-                EMI ₹{opt.emi.toLocaleString('en-IN')} · Budget ₹{targetMonthlyPayment.toLocaleString('en-IN')} · Rank {facts.rank || idx + 1}
-                {facts.monthlyHeadroom != null && ` · ₹${facts.monthlyHeadroom.toLocaleString('en-IN')} spare`}
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.88rem', lineHeight: 1.6, color: '#1f2937' }}>
+                <li>Fits your monthly budget of <strong>₹{targetMonthlyPayment.toLocaleString('en-IN')}</strong> — EMI is ₹{opt.emi.toLocaleString('en-IN')}/mo {facts.monthlyHeadroom != null && facts.monthlyHeadroom >= 0 ? `(₹${facts.monthlyHeadroom.toLocaleString('en-IN')} headroom)` : ''}</li>
+                <li>{facts.reason === 'lowest_total_interest' ? `Lowest total interest among feasible options — ₹${opt.totalInterest.toLocaleString('en-IN')} total interest, fastest payoff.` : facts.reason === 'lowest_monthly_payment' ? `Lowest monthly payment — most headroom, but higher total interest (₹${opt.totalInterest.toLocaleString('en-IN')}).` : facts.reasonLabel || `Tenure ${opt.tenorMonths} months, total interest ₹${opt.totalInterest.toLocaleString('en-IN')}.`}</li>
+                <li>Rank {facts.rank || idx + 1} of {options.length} — {idx === 0 ? 'best overall' : `alternative tenure`}</li>
+              </ul>
+              <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 8, fontStyle: 'italic' }}>
+                Deterministic: EMI/interest/tenure from solver, not LLM. {facts.reason && `Reason: ${facts.reason}`}.
               </div>
             </div>
           </div>
