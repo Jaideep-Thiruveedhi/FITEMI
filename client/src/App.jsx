@@ -1,672 +1,547 @@
 import React, { useState, useEffect } from 'react';
 import './styles/theme.css';
 
-// Dream prompts
 const PROMPTS = [
   "I want a laptop around ₹60,000",
-  "Find me a phone under ₹50,000 I can pay at ₹4,000/month",
+  "Find me a phone I can pay at ₹4,000/month",
   "Need something I can pay off within a year",
   "Show me audio gear under ₹30,000",
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('home');
+  const [tab, setTab] = useState('discover');
   const [dream, setDream] = useState('');
+  const [intent, setIntent] = useState(null);
   const [catalog, setCatalog] = useState([]);
-  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selected, setSelected] = useState(null);
   const [plans, setPlans] = useState([]);
-  const [selectedPlanIdx, setSelectedPlanIdx] = useState(0);
-  const [affordability, setAffordability] = useState({ takeHomePay: '', existingObligations: '', otherExpenses: '' });
+  const [activePlan, setActivePlan] = useState(0);
+  const [afford, setAfford] = useState({ takeHomePay:'', existingObligations:'', otherExpenses:'' });
   const [ceiling, setCeiling] = useState(null);
-  const [showCompass, setShowCompass] = useState(false);
-  const [tradeOff, setTradeOff] = useState('balanced'); // balanced | low-payment | low-interest | fast
-  const [whatIfDelta, setWhatIfDelta] = useState(0);
+  const [trade, setTrade] = useState('balanced');
+  const [whatIf, setWhatIf] = useState(0);
   const [checkout, setCheckout] = useState(null);
   const [orders, setOrders] = useState([]);
   const [audit, setAudit] = useState([]);
+  const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [aiMode, setAiMode] = useState(false);
-  const [conciergeMsg, setConciergeMsg] = useState("Hi! I'm your FITEMI concierge. Tell me what you want, and I'll find a comfortable way to pay for it.");
-  const [merchantInsights, setMerchantInsights] = useState(null);
+  const [aiOn, setAiOn] = useState(true);
+  const [concierge, setConcierge] = useState("Tell me what you want — I'll find a comfortable way to pay for it.");
 
-  // Load catalog on mount
-  useEffect(() => { fetchCatalog(); fetchOrders(); fetchAudit(); fetchInsights(); }, []);
+  useEffect(()=>{ loadCatalog(); loadOrders(); loadAudit(); loadInsights(); }, []);
+  const loadCatalog = async (q='')=>{ const r=await fetch(`/api/catalog?q=${encodeURIComponent(q)}`); const j=await r.json(); setCatalog(j.products||[]); };
+  const loadOrders = async ()=>{ const r=await fetch('/api/merchant/orders'); const j=await r.json(); setOrders(j.orders||[]); };
+  const loadAudit = async ()=>{ const r=await fetch('/api/audit'); const j=await r.json(); setAudit((j.entries||[]).slice(-8).reverse()); };
+  const loadInsights = async ()=>{ const r=await fetch('/api/merchant/insights'); const j=await r.json(); setInsights(j); };
 
-  const fetchCatalog = async (q = '') => {
-    const res = await fetch(`/api/catalog?q=${encodeURIComponent(q)}`);
-    const data = await res.json();
-    setCatalog(data.products || []);
-  };
-
-  const fetchOrders = async () => {
-    const res = await fetch('/api/merchant/orders');
-    const data = await res.json();
-    setOrders(data.orders || []);
-  };
-
-  const fetchAudit = async () => {
-    const res = await fetch('/api/audit');
-    const data = await res.json();
-    setAudit((data.entries || []).slice(-8).reverse());
-  };
-
-  const fetchInsights = async () => {
-    const res = await fetch('/api/merchant/insights');
-    const data = await res.json();
-    setMerchantInsights(data);
-  };
-
-  // Dream discovery -> catalog
-  const handleDream = async (text) => {
-    if (!text.trim()) return;
+  const handleDream = async (text)=>{
+    if(!text.trim()) return;
     setLoading(true);
-    try {
-      const res = await fetch('/api/agent/orchestrate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ intentText: text, affordabilityInputs: ceiling ? { takeHomePay: parseInt(affordability.takeHomePay), existingObligations: parseInt(affordability.existingObligations) } : null })
-      });
-      const data = await res.json();
-      setCatalog(data.catalogResults?.map(r => r.product) || []);
-      setConciergeMsg(data.explanation || "Found some options for you. Pick one to see comfortable payment paths.");
-      setActiveTab('explore');
-      // If affordability known, auto-select best fit
-      if (data.bestFit) {
-        const prod = data.catalogResults.find(r => r.isBestFit)?.product;
-        if (prod) handleProductSelect(prod);
-      }
-    } catch (e) { setConciergeMsg("Couldn't parse that — try 'laptop around ₹60,000' or pick a product below."); }
+    try{
+      const r=await fetch('/api/agent/orchestrate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({intentText:text, affordabilityInputs: ceiling?{takeHomePay:parseInt(afford.takeHomePay), existingObligations:parseInt(afford.existingObligations)}:null})});
+      const j=await r.json();
+      setIntent(j.intent);
+      setCatalog(j.catalogResults?.map(c=>c.product)||[]);
+      setConcierge(j.explanation||"Found options. Pick a product to explore payment fits.");
+      setTab('explore');
+      const best=j.catalogResults?.find(c=>c.isBestFit)?.product;
+      if(best) handleSelect(best, j.affordabilityCeiling);
+    }catch{ setConcierge("Try: 'laptop around ₹60,000'"); }
     setLoading(false);
   };
 
-  const handleProductSelect = async (product) => {
-    setSelectedProduct(product);
-    setActiveTab('fit');
-    setShowCompass(true);
-    // If we have ceiling, fetch plans
-    if (ceiling) fetchPlans(product, ceiling);
-    setConciergeMsg(`Great choice — ${product.name} at ₹${product.price.toLocaleString('en-IN')}. Let's find a comfortable EMI.`);
+  const handleSelect = async (product, knownCeiling)=>{
+    setSelected(product);
+    setTab('fit');
+    if(knownCeiling) setCeiling(knownCeiling);
+    else if(ceiling) fetchPlans(product, ceiling);
+    setConcierge(`Considering ${product.name} — ₹${product.price.toLocaleString('en-IN')}. Let's find a comfortable EMI.`);
   };
 
-  const fetchPlans = async (product, target) => {
-    const p = product || selectedProduct;
-    const t = target || ceiling;
-    if (!p || !t) return;
+  const fetchPlans = async (prod, target)=>{
+    const p=prod||selected; const t=target||ceiling;
+    if(!p||!t) return;
     setLoading(true);
-    const effTarget = whatIfDelta ? Math.max(500, t + whatIfDelta) : t;
-    const res = await fetch('/api/recommend', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemPrice: p.price, targetMonthlyPayment: effTarget })
-    });
-    const data = await res.json();
-    if (data.feasible) {
-      let opts = data.options;
-      // Trade-off re-ranking
-      if (tradeOff === 'low-payment') opts = [...opts].sort((a,b) => a.emi - b.emi);
-      else if (tradeOff === 'low-interest') opts = [...opts].sort((a,b) => a.totalInterest - b.totalInterest);
-      else if (tradeOff === 'fast') opts = [...opts].sort((a,b) => a.tenorMonths - b.tenorMonths);
-      setPlans(opts);
-      setSelectedPlanIdx(0);
-    } else {
-      setPlans([]);
-    }
+    const eff=Math.max(500, t + whatIf);
+    const r=await fetch('/api/recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemPrice:p.price, targetMonthlyPayment: eff})});
+    const j=await r.json();
+    if(j.feasible){
+      let opts=j.options;
+      if(trade==='low-payment') opts=[...opts].sort((a,b)=>a.emi-b.emi);
+      else if(trade==='low-interest') opts=[...opts].sort((a,b)=>a.totalInterest-b.totalInterest);
+      else if(trade==='fast') opts=[...opts].sort((a,b)=>a.tenorMonths-b.tenorMonths);
+      setPlans(opts); setActivePlan(0);
+    } else setPlans([]);
+    setLoading(false);
+  };
+  useEffect(()=>{ if(selected&&ceiling) fetchPlans(); },[trade, whatIf, ceiling]);
+
+  const handleAfford = async ()=>{
+    const th=parseInt(afford.takeHomePay); const ob=parseInt(afford.existingObligations);
+    if(!th){ setConcierge("Enter take-home pay."); return; }
+    const r=await fetch('/api/recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemPrice:selected?.price||60000, takeHomePay:th, existingObligations:ob, otherExpenses:parseInt(afford.otherExpenses)||0})});
+    const j=await r.json();
+    if(j.affordabilityCeiling!=null){ setCeiling(j.affordabilityCeiling); setConcierge(`Comfort zone ₹${j.affordabilityCeiling.toLocaleString('en-IN')}/mo (0.4× take-home − obligations, backend).`); if(selected) fetchPlans(selected, j.affordabilityCeiling); }
+  };
+
+  const handleCheckout = async ()=>{
+    const plan=plans[activePlan];
+    if(!plan||!selected) return;
+    setLoading(true);
+    try{
+      const r=await fetch('/api/checkout/create-order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({productId:selected.id, plan:{tenorMonths:plan.tenorMonths, emi:plan.emi, totalInterest:plan.totalInterest, totalPaid:plan.totalPaid, lenderId:plan.lenderId}, amount:selected.price, buyer:{targetMonthlyPayment:ceiling, affordabilityCeiling:ceiling}, userApproval:true})});
+      const j=await r.json();
+      if(j.success){ setCheckout(j); setConcierge(j.isSimulated?'Simulated test order — no real charge.':'Razorpay test order created.'); loadOrders(); loadAudit(); }
+      else setConcierge(j.error);
+    }catch{ setConcierge("Checkout failed."); }
     setLoading(false);
   };
 
-  useEffect(() => { if (selectedProduct && ceiling) fetchPlans(); }, [tradeOff, whatIfDelta, ceiling]);
-
-  const handleAffordability = async () => {
-    const takeHome = parseInt(affordability.takeHomePay);
-    const obligations = parseInt(affordability.existingObligations);
-    if (!takeHome || obligations == null || isNaN(takeHome)) { setConciergeMsg("Please enter your take-home pay."); return; }
-    const res = await fetch('/api/recommend', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemPrice: selectedProduct?.price || 60000, takeHomePay: takeHome, existingObligations: obligations, otherExpenses: parseInt(affordability.otherExpenses)||0 })
-    });
-    const data = await res.json();
-    if (data.affordabilityCeiling != null) {
-      setCeiling(data.affordabilityCeiling);
-      setConciergeMsg(`Your comfort zone is ₹${data.affordabilityCeiling.toLocaleString('en-IN')}/mo (0.4× take-home − obligations). Now let's see plans that fit.`);
-      if (selectedProduct) fetchPlans(selectedProduct, data.affordabilityCeiling);
-    }
-  };
-
-  const handleCheckout = async () => {
-    const plan = plans[selectedPlanIdx];
-    if (!plan || !selectedProduct) return;
-    setLoading(true);
-    try {
-      const res = await fetch('/api/checkout/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productId: selectedProduct.id,
-          plan: { tenorMonths: plan.tenorMonths, emi: plan.emi, totalInterest: plan.totalInterest, totalPaid: plan.totalPaid, lenderId: plan.lenderId },
-          amount: selectedProduct.price,
-          buyer: { targetMonthlyPayment: ceiling, affordabilityCeiling: ceiling },
-          userApproval: true
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setCheckout(data);
-        setConciergeMsg(`Order created! ${data.isSimulated ? 'Simulated test-mode — no real charge.' : 'Razorpay test order ready.'}`);
-        fetchOrders(); fetchAudit();
-      } else {
-        setConciergeMsg(`Checkout failed: ${data.error}`);
-      }
-    } catch (e) { setConciergeMsg("Checkout failed — try again."); }
-    setLoading(false);
-  };
-
-  const selectedPlan = plans[selectedPlanIdx];
+  const plan=plans[activePlan];
 
   return (
     <div>
-      <nav className="nav-shell">
+      <nav className="parchment-nav">
         <div className="nav-inner">
-          <div className="nav-logo">
-            <div className="nav-logo-mark">◈</div> FITEMI
-            <span style={{ fontSize:'0.7rem', background:'var(--peach)', padding:'4px 8px', borderRadius:999, marginLeft:8 }}>AI COMMERCE</span>
-          </div>
+          <div className="nav-wordmark">FITEMI <span>TRACK 01 • AI COMMERCE</span></div>
           <div className="nav-tabs">
-            {[
-              ['home','Home'],
-              ['explore','Explore'],
-              ['fit','My Fit'],
-              ['orders','Orders'],
-              ['merchant','Merchant'],
-            ].map(([id,label]) => (
-              <button key={id} className={`nav-tab ${activeTab===id?'active':''}`} onClick={()=>setActiveTab(id)}>{label}</button>
+            {['discover','explore','fit','orders','merchant'].map(id=>(
+              <button key={id} className={`nav-tab ${tab===id?'active':''}`} onClick={()=>setTab(id)}>{id==='discover'?'Discover':id==='fit'?'My Fit':id.charAt(0).toUpperCase()+id.slice(1)}</button>
             ))}
           </div>
-          <button className="btn btn-ghost" onClick={()=>setAiMode(!aiMode)} style={{ fontSize:'0.8rem', border: aiMode?'1px solid var(--peach-deep)':'none' }}>
-            {aiMode ? '🤖 AI Buyer: ON' : '🤖 AI Buyer'}
-          </button>
+          <button className="btn btn-ghost" style={{fontSize:'0.75rem', border: aiOn?'1px solid var(--navy)':'1px solid var(--line)'}} onClick={()=>setAiOn(!aiOn)}>{aiOn?'● AI Buyer ON':'○ AI Buyer'}</button>
         </div>
       </nav>
 
-      <div className="page-shell">
-        {/* HOME — Dream Discovery */}
-        {activeTab==='home' && (
+      <div className="page">
+        {tab==='discover' && (
           <>
-            <div className="hero">
-              <h1>What's on <span>your mind?</span></h1>
-              <p>FITEMI helps your AI buyer find what you can actually afford — then pays the right way.</p>
-              <div className="dream-input-wrap">
-                <span className="dream-input-icon">✦</span>
-                <input className="dream-input" placeholder="I want a laptop around ₹60,000… or try 'phone at ₹4,000/month'" value={dream} onChange={e=>setDream(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') handleDream(dream); }} />
-              </div>
-              <div className="dream-prompts">
-                {PROMPTS.map(p => <button key={p} className="prompt-pill" onClick={()=>{ setDream(p); handleDream(p); }}>{p}</button>)}
-              </div>
-              <div style={{ marginTop:24, display:'flex', gap:12, justifyContent:'center' }}>
-                <button className="btn btn-primary" onClick={()=>handleDream(dream)} disabled={loading}>{loading?'Thinking…':'Find my fit →'}</button>
-                <button className="btn btn-secondary" onClick={()=>setActiveTab('explore')}>Browse catalog</button>
-              </div>
+            <div className="editorial-hero">
+              <div className="label">AI Goal Confirmation • FITEMI</div>
+              <h1>What are you <em>trying to buy?</em></h1>
+              <p>An intelligent financial environment for deciding what to buy and how to pay for it — not an EMI calculator.</p>
             </div>
 
-            <div className="card" style={{ background:'linear-gradient(135deg, var(--peach-light) 0%, #fff 100%)', display:'flex', gap:24, alignItems:'center', flexWrap:'wrap' }}>
-              <div style={{ fontSize:'3rem' }}>🧭</div>
-              <div style={{ flex:1, minWidth:240 }}>
-                <h3 style={{ marginBottom:8 }}>AI Buyer Mode</h3>
-                <p style={{ color:'var(--navy-soft)', fontSize:'0.9rem' }}>“Find me a laptop for my user. Budget ₹60,000. Comfortable ₹5,000/mo.” → FITEMI discovers, compares, and asks for approval before charging. Try the prompts above.</p>
+            <div className="dream-stage">
+              <div style={{position:'relative'}}>
+                <span style={{position:'absolute', left:20, top:'50%', transform:'translateY(-50%)', fontSize:'1.4rem'}}>✦</span>
+                <input className="dream-input" placeholder="I want a laptop around ₹60,000…" value={dream} onChange={e=>setDream(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleDream(dream)} />
               </div>
-              <button className="btn btn-primary" onClick={()=>handleDream("Find me a laptop for my user. Budget ₹60,000. Comfortable monthly payment ₹5,000.")}>Run AI Buyer demo</button>
-            </div>
-
-            <div style={{ marginTop:24, display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
-              <div className="card">
-                <h4>📦 Merchant Catalog</h4>
-                <p style={{ fontSize:'0.9rem', color:'var(--navy-soft)', marginTop:8 }}>{catalog.length} products from 3 merchants — agent-readable, filterable.</p>
-                <button className="btn btn-ghost" style={{ marginTop:12, color:'var(--navy)' }} onClick={()=>setActiveTab('explore')}>Explore →</button>
+              <div className="dream-bar">
+                {PROMPTS.map(p=> <button key={p} className="prompt-pill" onClick={()=>{setDream(p); handleDream(p);}}>{p}</button>)}
+                <button className="btn btn-primary" style={{marginLeft:'auto', padding:'8px 16px'}} onClick={()=>handleDream(dream)} disabled={loading}>{loading?'Thinking…':'Find my fit →'}</button>
               </div>
-              <div className="card card-lilac">
-                <h4>🛡️ Bounded & Gated</h4>
-                <p style={{ fontSize:'0.9rem', color:'var(--navy-soft)', marginTop:8 }}>No payment without explicit approval. Every money action is deterministic and audited.</p>
-              </div>
-            </div>
-
-            <AiConcierge msg={conciergeMsg} />
-          </>
-        )}
-
-        {/* EXPLORE — Catalog */}
-        {activeTab==='explore' && (
-          <>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:12 }}>
-              <h2>Explore</h2>
-              <div style={{ display:'flex', gap:8 }}>
-                <input placeholder="Search products…" style={{ padding:'10px 16px', borderRadius:999, border:'1px solid rgba(26,26,46,0.1)', background:'white' }} onKeyDown={e=>{ if(e.key==='Enter') fetchCatalog(e.target.value); }} />
-                <button className="btn btn-secondary" onClick={()=>fetchCatalog('')}>All</button>
-                <button className="btn btn-secondary" onClick={()=>fetchCatalog('laptop')}>Laptops</button>
-                <button className="btn btn-secondary" onClick={()=>fetchCatalog('phone')}>Phones</button>
-              </div>
-            </div>
-            <div className="catalog-grid">
-              {catalog.map(p => (
-                <div key={p.id} className={`product-card ${selectedProduct?.id===p.id?'selected':''}`} onClick={()=>handleProductSelect(p)}>
-                  <div className="product-image" style={{ background: p.color || 'var(--peach-light)' }}>
-                    {p.badge && <span className="product-badge">{p.badge}</span>}
-                    <span>{p.image}</span>
-                  </div>
-                  <div className="product-info">
-                    <div className="product-merchant">{p.merchant?.name || p.merchantId} • {p.category}</div>
-                    <div className="product-name">{p.name}</div>
-                    <div className="product-price">
-                      <span className="price-current">₹{p.price.toLocaleString('en-IN')}</span>
-                      {p.originalPrice && <span className="price-original">₹{p.originalPrice.toLocaleString('en-IN')}</span>}
-                    </div>
-                    <div className="product-desc">{p.description}</div>
-                    <div style={{ fontSize:'0.75rem', color:'var(--navy-soft)' }}>{p.availability}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {catalog.length===0 && <p style={{ textAlign:'center', marginTop:32, color:'var(--navy-soft)' }}>No products match. Try "laptop" or clear search.</p>}
-            <AiConcierge msg={conciergeMsg} />
-          </>
-        )}
-
-        {/* MY FIT — Affordability + Spectrum + Trade-off + What-if */}
-        {activeTab==='fit' && (
-          <>
-            {!selectedProduct ? (
-              <div className="card" style={{ textAlign:'center', padding:48 }}>
-                <div style={{ fontSize:'3rem', marginBottom:16 }}>🔍</div>
-                <h3>Pick a product to find your fit</h3>
-                <p style={{ color:'var(--navy-soft)', marginTop:8 }}>Your affordability and EMI spectrum will appear here.</p>
-                <button className="btn btn-primary" style={{ marginTop:16 }} onClick={()=>setActiveTab('explore')}>Choose product</button>
-              </div>
-            ) : (
-              <>
-                <div className="card" style={{ display:'flex', gap:20, alignItems:'center', flexWrap:'wrap' }}>
-                  <div style={{ fontSize:'2.5rem', background: selectedProduct.color, width:72, height:72, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:16 }}>{selectedProduct.image}</div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:'0.75rem', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--navy-soft)' }}>{selectedProduct.merchant?.name} • {selectedProduct.category}</div>
-                    <h3>{selectedProduct.name}</h3>
-                    <div style={{ fontWeight:700, fontSize:'1.25rem' }}>₹{selectedProduct.price.toLocaleString('en-IN')}</div>
-                  </div>
-                  <button className="btn btn-ghost" onClick={()=>setActiveTab('explore')}>Change</button>
-                </div>
-
-                {/* Affordability Compass */}
-                <div className="card" style={{ marginTop:20 }}>
-                  <h3>Affordability Compass</h3>
-                  <p style={{ fontSize:'0.9rem', color:'var(--navy-soft)' }}>What's comfortable for you? Backend is the source of truth — frontend never decides.</p>
-                  
-                  {!ceiling ? (
-                    <div style={{ marginTop:20, display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
-                      <input placeholder="Take-home pay (₹)" type="number" value={affordability.takeHomePay} onChange={e=>setAffordability({...affordability, takeHomePay:e.target.value})} style={{ padding:'12px', borderRadius:12, border:'1px solid rgba(26,26,46,0.1)' }} />
-                      <input placeholder="Existing obligations (₹)" type="number" value={affordability.existingObligations} onChange={e=>setAffordability({...affordability, existingObligations:e.target.value})} style={{ padding:'12px', borderRadius:12, border:'1px solid rgba(26,26,46,0.1)' }} />
-                      <input placeholder="Other expenses (₹)" type="number" value={affordability.otherExpenses} onChange={e=>setAffordability({...affordability, otherExpenses:e.target.value})} style={{ padding:'12px', borderRadius:12, border:'1px solid rgba(26,26,46,0.1)' }} />
-                    </div>
-                  ) : null}
-                  
-                  {!ceiling ? (
-                    <button className="btn btn-primary" style={{ marginTop:16 }} onClick={handleAffordability} disabled={loading}>Calculate my comfort zone</button>
-                  ) : (
-                    <div className="compass-wrap" style={{ marginTop:20 }}>
-                      <div style={{ display:'flex', justifyContent:'space-between', fontSize:'0.8rem', fontWeight:600 }}>
-                        <span>TOO TIGHT</span><span>COMFORTABLE</span><span>STRETCHED</span>
-                      </div>
-                      <div className="compass-track">
-                        <div className="compass-thumb" style={{ left: `${Math.min(90, Math.max(10, (ceiling/8000)*100))}%` }}>●</div>
-                      </div>
-                      <div className="compass-value">
-                        <div className="compass-amount">₹{ceiling.toLocaleString('en-IN')}/mo</div>
-                        <div className="compass-sub">Comfort zone • 0.4× take-home − obligations (backend) • <button className="btn btn-ghost" style={{ padding:'4px 8px', fontSize:'0.8rem' }} onClick={()=>{ setCeiling(null); setPlans([]); }}>Recalculate</button></div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* EMI Spectrum */}
-                {ceiling && (
-                  <div className="spectrum-wrap" style={{ marginTop:20 }}>
-                    <h3>EMI Spectrum</h3>
-                    <p style={{ fontSize:'0.85rem', color:'var(--navy-soft)' }}>Lower monthly payment ←————————→ Lower total interest • Interactive — actual solver values</p>
-                    {plans.length===0 ? (
-                      <div style={{ textAlign:'center', padding:32, background:'var(--peach-light)', borderRadius:16, marginTop:16 }}>
-                        <h4>No feasible plan</h4>
-                        <p style={{ fontSize:'0.9rem', color:'var(--navy-soft)', marginTop:8 }}>Your budget ₹{ceiling.toLocaleString('en-IN')}/mo is below the lowest feasible EMI for this product. Try a lower-priced product or increase budget.</p>
-                        <div style={{ marginTop:16, display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap' }}>
-                          <button className="btn btn-secondary" onClick={()=>setActiveTab('explore')}>Explore lower-priced</button>
-                          <button className="btn btn-secondary" onClick={()=>setWhatIfDelta(1000)}>What if +₹1,000?</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="spectrum-track">
-                          {plans.map((p,i) => {
-                            const left = plans.length===1 ? 50 : (i/(plans.length-1))*100;
-                            return (
-                              <div key={p.lenderId+p.tenorMonths} className={`spectrum-plan ${i===selectedPlanIdx?'selected':''}`} style={{ left: `${left}%` }} onClick={()=>setSelectedPlanIdx(i)}>
-                                {i===0 && <div className="spectrum-fit">★ YOUR FIT</div>}
-                                <div className="spectrum-dot"></div>
-                                <div className="spectrum-emi">₹{p.emi.toLocaleString('en-IN')}</div>
-                                <div className="spectrum-tenor">{p.tenorMonths}mo</div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div style={{ display:'flex', justifyContent:'space-between', fontSize:'0.75rem', color:'var(--navy-soft)', marginTop:8 }}>
-                          <span>LOWER MONTHLY</span><span>LOWER INTEREST</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {/* Trade-off Lab */}
-                {plans.length>0 && (
-                  <div className="card" style={{ marginTop:20 }}>
-                    <h3>Trade-off Lab</h3>
-                    <p style={{ fontSize:'0.85rem', color:'var(--navy-soft)' }}>What matters more? Plans re-rank deterministically.</p>
-                    <div style={{ display:'flex', gap:8, marginTop:16, flexWrap:'wrap' }}>
-                      {[
-                        ['balanced','Balanced'],
-                        ['low-payment','Lower monthly'],
-                        ['low-interest','Lower interest'],
-                        ['fast','Fastest payoff'],
-                      ].map(([k,l]) => (
-                        <button key={k} className={`btn ${tradeOff===k?'btn-primary':'btn-secondary'}`} style={{ padding:'10px 16px', fontSize:'0.85rem' }} onClick={()=>setTradeOff(k)}>{l}</button>
-                      ))}
-                    </div>
-                    {selectedPlan && (
-                      <p style={{ marginTop:12, fontSize:'0.85rem', background:'var(--lilac-light)', padding:12, borderRadius:12 }}>
-                        Choosing <strong>{selectedPlan.tenorMonths}mo @ ₹{selectedPlan.emi.toLocaleString('en-IN')}</strong> vs next: tenure diff {Math.abs(selectedPlan.tenorMonths - (plans[1]?.tenorMonths||selectedPlan.tenorMonths))}mo, interest diff ₹{Math.abs(selectedPlan.totalInterest - (plans[1]?.totalInterest||selectedPlan.totalInterest)).toLocaleString('en-IN')}.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* What-If Simulator */}
-                {ceiling && plans.length>0 && (
-                  <div className="card" style={{ marginTop:20 }}>
-                    <h3>What-if Simulator</h3>
-                    <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:12 }}>
-                      <button className="btn btn-secondary" onClick={()=>setWhatIfDelta(-1000)} style={whatIfDelta===-1000?{background:'var(--navy)',color:'white'}:{}}>Budget −₹1,000</button>
-                      <button className="btn btn-secondary" onClick={()=>setWhatIfDelta(0)} style={whatIfDelta===0?{background:'var(--navy)',color:'white'}:{}}>Current</button>
-                      <button className="btn btn-secondary" onClick={()=>setWhatIfDelta(500)} style={whatIfDelta===500?{background:'var(--navy)',color:'white'}:{}}>Budget +₹500</button>
-                      <button className="btn btn-secondary" onClick={()=>setWhatIfDelta(1000)} style={whatIfDelta===1000?{background:'var(--navy)',color:'white'}:{}}>Budget +₹1,000</button>
-                      <button className="btn btn-secondary" onClick={()=>setWhatIfDelta(-500)}>Pay 6mo sooner</button>
-                    </div>
-                    <div style={{ marginTop:16, display:'grid', gridTemplateColumns:'1fr auto 1fr', gap:12, alignItems:'center', textAlign:'center' }}>
-                      <div style={{ background:'var(--cream)', padding:16, borderRadius:12 }}>
-                        <div style={{ fontSize:'0.75rem', color:'var(--navy-soft)' }}>CURRENT</div>
-                        <div style={{ fontWeight:700 }}>₹{ceiling.toLocaleString('en-IN')}/mo</div>
-                        <div style={{ fontSize:'0.8rem' }}>{plans.length} options</div>
-                      </div>
-                      <div>→</div>
-                      <div style={{ background:'var(--peach-light)', padding:16, borderRadius:12, border:'2px solid var(--peach)' }}>
-                        <div style={{ fontSize:'0.75rem', color:'var(--navy-soft)' }}>NEW CONSTRAINT</div>
-                        <div style={{ fontWeight:700 }}>₹{(ceiling+whatIfDelta).toLocaleString('en-IN')}/mo</div>
-                        <div style={{ fontSize:'0.8rem' }}>{whatIfDelta===0?'— same':'recalculating...'}</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Deep Plan View */}
-                {selectedPlan && (
-                  <div className="card" style={{ marginTop:20, background:'linear-gradient(135deg, #fff 0%, var(--lilac-light) 100%)' }}>
-                    <h3>Deep Plan View</h3>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginTop:16 }}>
-                      <div>
-                        <div style={{ fontSize:'2rem', fontWeight:700 }}>₹{selectedPlan.emi.toLocaleString('en-IN')}<span style={{ fontSize:'1rem', fontWeight:400 }}>/mo</span></div>
-                        <div style={{ fontSize:'0.9rem', color:'var(--navy-soft)' }}>{selectedPlan.tenorMonths} months • {selectedPlan.lenderId}</div>
-                        <div style={{ marginTop:16, fontSize:'0.85rem' }}>
-                          <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid rgba(26,26,46,0.06)' }}><span>Principal</span><strong>₹{selectedProduct.price.toLocaleString('en-IN')}</strong></div>
-                          <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid rgba(26,26,46,0.06)' }}><span>Interest</span><strong>₹{selectedPlan.totalInterest.toLocaleString('en-IN')}</strong></div>
-                          <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid rgba(26,26,46,0.06)' }}><span>Fee</span><strong>₹499</strong></div>
-                          <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', fontWeight:700 }}><span>Total</span><strong>₹{(selectedPlan.totalPaid+499).toLocaleString('en-IN')}</strong></div>
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ background:'white', padding:16, borderRadius:12 }}>
-                          <div style={{ height:12, background:`linear-gradient(90deg, var(--navy) 0%, var(--navy) ${(selectedProduct.price/selectedPlan.totalPaid)*100}%, var(--peach) ${(selectedProduct.price/selectedPlan.totalPaid)*100}%, var(--peach) 100%)`, borderRadius:999, marginBottom:8 }}></div>
-                          <div style={{ display:'flex', justifyContent:'space-between', fontSize:'0.75rem' }}><span>● Principal</span><span style={{ color:'var(--peach-deep)' }}>● Interest</span></div>
-                        </div>
-                        <div style={{ marginTop:16, padding:12, background:'white', borderRadius:12, border:'1px solid var(--lilac)' }}>
-                          <div style={{ fontSize:'0.75rem', fontWeight:800, textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--navy)', marginBottom:8 }}>Why this plan?</div>
-                          <ul style={{ paddingLeft:18, fontSize:'0.85rem', lineHeight:1.6 }}>
-                            <li>Fits your ₹{ceiling.toLocaleString('en-IN')}/mo — ₹{selectedPlan.explanationFacts.monthlyHeadroom.toLocaleString('en-IN')} headroom</li>
-                            <li>{selectedPlan.explanationFacts.reason==='lowest_total_interest'?'Lowest total interest — fastest payoff':`Interest ₹${selectedPlan.totalInterest.toLocaleString('en-IN')}`}</li>
-                            <li>Rank {selectedPlan.explanationFacts.rank} of {plans.length} — {selectedPlan.tenorMonths}mo payoff</li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ marginTop:16, display:'flex', gap:8 }}>
-                      <button className="btn btn-primary" onClick={()=>setActiveTab('orders')} style={{ flex:1 }}>Continue to checkout →</button>
-                      <button className="btn btn-secondary" onClick={()=>{ const el=document.getElementById('alternatives'); el?.scrollIntoView({behavior:'smooth'}); }}>Alternatives</button>
-                    </div>
-                    <div id="alternatives" style={{ marginTop:16 }}>
-                      <h4 style={{ fontSize:'0.9rem', marginBottom:8 }}>Alternatives</h4>
-                      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px,1fr))', gap:8 }}>
-                        {plans.slice(1).map(p=>(
-                          <div key={p.lenderId} style={{ background:'white', padding:12, borderRadius:12, border:'1px solid rgba(26,26,46,0.08)' }}>
-                            <div style={{ fontWeight:600, fontSize:'0.9rem' }}>{p.lenderId} • {p.tenorMonths}mo</div>
-                            <div style={{ fontSize:'0.85rem' }}>₹{p.emi.toLocaleString('en-IN')}/mo • Interest ₹{p.totalInterest.toLocaleString('en-IN')}</div>
-                            <div style={{ fontSize:'0.75rem', color:'var(--navy-soft)', marginTop:4 }}>{p.explanationFacts.reasonLabel.substring(0,60)}…</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <AiConcierge msg={conciergeMsg} />
-              </>
-            )}
-          </>
-        )}
-
-        {/* ORDERS — Bounded Checkout + Razorpay */}
-        {activeTab==='orders' && (
-          <>
-            {!selectedPlan || !selectedProduct ? (
-              <div className="card" style={{ textAlign:'center', padding:48 }}>
-                <div style={{ fontSize:'3rem' }}>🛒</div>
-                <h3>No checkout yet</h3>
-                <p style={{ color:'var(--navy-soft)', marginTop:8 }}>Pick a product and plan in My Fit to checkout.</p>
-                <button className="btn btn-primary" style={{ marginTop:16 }} onClick={()=>setActiveTab('fit')}>Go to My Fit</button>
-              </div>
-            ) : (
-              <>
-                <div className="card" style={{ border:'2px solid var(--navy)', background:'linear-gradient(135deg, var(--peach-light) 0%, white 100%)' }}>
-                  <div style={{ textAlign:'center', marginBottom:24 }}>
-                    <div style={{ fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--navy-soft)' }}>You are about to purchase</div>
-                    <div style={{ fontSize:'1.75rem', fontWeight:700, marginTop:8 }}>{selectedProduct.name}</div>
-                    <div style={{ fontSize:'1.25rem', color:'var(--navy-soft)' }}>₹{selectedProduct.price.toLocaleString('en-IN')}</div>
-                  </div>
-                  <div style={{ background:'white', padding:20, borderRadius:16, display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
-                    <div>
-                      <div style={{ fontSize:'0.75rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--navy-soft)' }}>Plan</div>
-                      <div style={{ fontSize:'1.5rem', fontWeight:700 }}>₹{selectedPlan.emi.toLocaleString('en-IN')}/mo</div>
-                      <div style={{ fontSize:'0.9rem', color:'var(--navy-soft)' }}>{selectedPlan.tenorMonths} months • {selectedPlan.lenderId}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize:'0.75rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--navy-soft)' }}>Total payable</div>
-                      <div style={{ fontSize:'1.5rem', fontWeight:700 }}>₹{selectedPlan.totalPaid.toLocaleString('en-IN')}</div>
-                      <div style={{ fontSize:'0.9rem', color:'var(--navy-soft)' }}>Interest ₹{selectedPlan.totalInterest.toLocaleString('en-IN')}</div>
-                    </div>
-                  </div>
-                  <div style={{ background:'white', padding:16, borderRadius:12, marginTop:16, border:'1px solid var(--lilac)' }}>
-                    <div style={{ fontSize:'0.8rem', fontWeight:800, textTransform:'uppercase' }}>Why</div>
-                    <ul style={{ paddingLeft:18, fontSize:'0.85rem', marginTop:8, lineHeight:1.6 }}>
-                      <li>Within approved budget ₹{ceiling?.toLocaleString('en-IN')}/mo (₹{selectedPlan.explanationFacts.monthlyHeadroom.toLocaleString('en-IN')} headroom)</li>
-                      <li>{selectedPlan.explanationFacts.reason==='lowest_total_interest'?'Lowest interest among matching options':selectedPlan.explanationFacts.reasonLabel}</li>
-                      <li>Deterministic solver — no LLM financial decision</li>
-                    </ul>
-                  </div>
-                  <div style={{ display:'flex', gap:12, marginTop:20 }}>
-                    <button className="btn btn-primary" style={{ flex:1 }} onClick={handleCheckout} disabled={loading}>{loading?'Processing…':'Approve payment'}</button>
-                    <button className="btn btn-secondary" onClick={()=>setActiveTab('fit')}>Change plan</button>
-                    <button className="btn btn-ghost" onClick={()=>{ setCheckout(null); setActiveTab('fit'); }}>Cancel</button>
-                  </div>
-                  <div style={{ textAlign:'center', marginTop:12, fontSize:'0.75rem', color:'var(--navy-soft)' }}>🔒 Bounded gate — agent cannot charge without your approval. Test-mode only.</div>
-                </div>
-
-                {checkout && (
-                  <div className="card" style={{ marginTop:16, background: checkout.isSimulated?'var(--peach-light)':'#ECFDF5', border:`2px solid ${checkout.isSimulated?'var(--peach-deep)':'var(--success)'}` }}>
-                    <h3>{checkout.isSimulated?'✓ Simulated Test Order':'✓ Razorpay Test Order'}</h3>
-                    <p style={{ fontSize:'0.9rem', marginTop:8 }}>{checkout.message}</p>
-                    <div style={{ background:'white', padding:16, borderRadius:12, marginTop:12, fontSize:'0.85rem' }}>
-                      <div>Order ID: <strong>{checkout.orderId}</strong></div>
-                      <div>Razorpay ID: <strong>{checkout.razorpayOrder.id}</strong></div>
-                      <div>Amount: <strong>₹{checkout.razorpayOrder.amountInRupees?.toLocaleString('en-IN') || selectedProduct.price.toLocaleString('en-IN')}</strong> • {checkout.razorpayOrder.currency || 'INR'}</div>
-                      <div>Status: <strong>{checkout.merchantOrder?.status || 'paid'}</strong></div>
-                    </div>
-                    {!checkout.isSimulated && <p style={{ fontSize:'0.8rem', marginTop:12, color:'var(--navy-soft)' }}>Use Razorpay test card `4111 1111 1111 1111` + any CVV to complete in dashboard.</p>}
-                  </div>
-                )}
-
-                <div className="card" style={{ marginTop:16 }}>
-                  <h4>Your Orders</h4>
-                  {orders.length===0 ? <p style={{ fontSize:'0.9rem', color:'var(--navy-soft)', marginTop:8 }}>No orders yet — complete a checkout above.</p> : (
-                    <div style={{ marginTop:12, display:'grid', gap:8 }}>
-                      {orders.slice(0,5).map(o=>(
-                        <div key={o.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:12, background:'var(--cream)', borderRadius:12 }}>
-                          <div>
-                            <div style={{ fontWeight:600 }}>{o.productName}</div>
-                            <div style={{ fontSize:'0.8rem', color:'var(--navy-soft)' }}>{o.plan.emi ? `₹${o.plan.emi}/mo • ${o.plan.tenorMonths}mo` : ''} • {o.merchantName}</div>
-                          </div>
-                          <div style={{ textAlign:'right' }}>
-                            <div style={{ fontWeight:600, color: o.status==='paid'?'var(--success)': o.status==='awaiting_approval'?'var(--warning)':'var(--navy)' }}>{o.status}</div>
-                            <div style={{ fontSize:'0.75rem', color:'var(--navy-soft)' }}>₹{o.amount.toLocaleString('en-IN')}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-            <AiConcierge msg={conciergeMsg} />
-          </>
-        )}
-
-        {/* MERCHANT */}
-        {activeTab==='merchant' && (
-          <>
-            <h2>Merchant Console</h2>
-            <p style={{ color:'var(--navy-soft)', marginBottom:16 }}>TechHaven • 3 products • Real-time AI buyer activity</p>
-            
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px,1fr))', gap:12, marginBottom:20 }}>
-              <div className="card" style={{ textAlign:'center' }}>
-                <div style={{ fontSize:'2rem', fontWeight:700 }}>{orders.length}</div>
-                <div style={{ fontSize:'0.8rem', color:'var(--navy-soft)' }}>Total orders</div>
-              </div>
-              <div className="card" style={{ textAlign:'center' }}>
-                <div style={{ fontSize:'2rem', fontWeight:700, color:'var(--success)' }}>{orders.filter(o=>o.status==='paid').length}</div>
-                <div style={{ fontSize:'0.8rem', color:'var(--navy-soft)' }}>Paid (test-mode)</div>
-              </div>
-              <div className="card" style={{ textAlign:'center' }}>
-                <div style={{ fontSize:'2rem', fontWeight:700, color:'var(--warning)' }}>{orders.filter(o=>o.status==='awaiting_approval').length}</div>
-                <div style={{ fontSize:'0.8rem', color:'var(--navy-soft)' }}>Awaiting approval</div>
-              </div>
-            </div>
-
-            <div className="card">
-              <h4>Recent AI Buyer Activity</h4>
-              {orders.length===0 ? <p style={{ color:'var(--navy-soft)', marginTop:8 }}>No activity yet — create an order in Orders →</p> : (
-                <div style={{ marginTop:12 }}>
-                  {orders.slice(0,5).map(o=>(
-                    <div key={o.id} style={{ display:'flex', gap:12, padding:12, borderBottom:'1px solid rgba(26,26,46,0.06)', alignItems:'center' }}>
-                      <div style={{ width:40, height:40, background:'var(--lilac)', borderRadius:999, display:'flex', alignItems:'center', justifyContent:'center' }}>🤖</div>
-                      <div style={{ flex:1 }}>
-                        <div style={{ fontWeight:600, fontSize:'0.9rem' }}>{o.status==='paid'?'PAID':'NEW AI BUYER'} — {o.productName}</div>
-                        <div style={{ fontSize:'0.8rem', color:'var(--navy-soft)' }}>{o.plan ? `Agent selected: ₹${o.plan.emi}/mo • ${o.plan.tenorMonths}mo` : ''} • {new Date(o.createdAt).toLocaleString()}</div>
-                      </div>
-                      <div style={{ fontSize:'0.8rem', fontWeight:600, padding:'6px 12px', borderRadius:999, background: o.status==='paid'?'#ECFDF5':'#FFFBEB', color: o.status==='paid'?'var(--success)':'var(--warning)' }}>{o.status}</div>
-                    </div>
-                  ))}
+              {intent && (
+                <div style={{padding:16, background:'var(--lilac-light)', borderTop:'1px solid var(--line)', display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, textAlign:'center'}}>
+                  <div><div className="label">What I heard</div><div style={{fontWeight:700, marginTop:4}}>{intent.category||'—'}</div><div style={{fontSize:'0.75rem', color:'var(--navy-soft)'}}>Category</div></div>
+                  <div><div className="label">Price range</div><div style={{fontWeight:700, marginTop:4}}>{intent.maxPrice?`≈ ₹${intent.maxPrice.toLocaleString('en-IN')}`:'—'}</div><div style={{fontSize:'0.75rem', color:'var(--navy-soft)'}}>Budget</div></div>
+                  <div><div className="label">Comfort</div><div style={{fontWeight:700, marginTop:4}}>{intent.targetMonthly?`≤ ₹${intent.targetMonthly.toLocaleString('en-IN')}/mo`:'—'}</div><div style={{fontSize:'0.75rem', color:'var(--navy-soft)'}}>Monthly</div></div>
                 </div>
               )}
             </div>
 
-            <div className="card" style={{ marginTop:16 }}>
-              <h4>Revenue Intelligence <span style={{ fontSize:'0.7rem', background:'var(--lilac)', padding:'4px 8px', borderRadius:999, marginLeft:8 }}>DEMO SYNTHETIC</span></h4>
-              {merchantInsights ? (
-                <div style={{ marginTop:12 }}>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:16 }}>
-                    <div style={{ background:'var(--cream)', padding:16, borderRadius:12, textAlign:'center' }}>
-                      <div style={{ fontSize:'1.5rem', fontWeight:700 }}>{merchantInsights.real.conversionRate}</div>
-                      <div style={{ fontSize:'0.75rem', color:'var(--navy-soft)' }}>Conversion (real orders)</div>
-                    </div>
-                    <div style={{ background:'var(--peach-light)', padding:16, borderRadius:12, textAlign:'center' }}>
-                      <div style={{ fontSize:'1.5rem', fontWeight:700 }}>{merchantInsights.real.totalOrders}</div>
-                      <div style={{ fontSize:'0.75rem', color:'var(--navy-soft)' }}>Total demo orders</div>
-                    </div>
-                  </div>
-                  {merchantInsights.syntheticInsights.map((ins,i)=>(
-                    <div key={i} style={{ background:'white', border:'1px solid rgba(26,26,46,0.08)', padding:16, borderRadius:12, marginBottom:8 }}>
-                      <div style={{ fontSize:'0.9rem', fontWeight:600 }}>💡 {ins.insight}</div>
-                      <div style={{ fontSize:'0.75rem', color:'var(--navy-soft)', marginTop:4 }}>{ins.source}</div>
-                      <div style={{ fontSize:'0.8rem', color:'var(--success)', marginTop:4 }}>→ {ins.action}</div>
-                    </div>
-                  ))}
-                  <div style={{ fontSize:'0.7rem', color:'var(--navy-soft)', marginTop:8, fontStyle:'italic' }}>{merchantInsights.disclaimer}</div>
-                </div>
-              ) : <p style={{ color:'var(--navy-soft)' }}>Loading insights…</p>}
+            <div style={{maxWidth:720, margin:'16px auto 0', display:'flex', gap:8, justifyContent:'center'}}>
+              <button className="btn btn-soft" onClick={()=>handleDream("Find me a laptop for my user. Budget ₹60,000. Comfortable monthly payment ₹5,000.")}>Run AI Buyer demo</button>
+              <button className="btn btn-ghost" onClick={()=>setTab('explore')}>Browse catalog →</button>
             </div>
 
-            <div className="card" style={{ marginTop:16 }}>
-              <h4>Audit / Trust Timeline</h4>
-              <p style={{ fontSize:'0.8rem', color:'var(--navy-soft)' }}>Every money action is explainable, bounded, gated.</p>
-              <div style={{ marginTop:12, position:'relative', paddingLeft:24 }}>
-                <div style={{ position:'absolute', left:8, top:0, bottom:0, width:2, background:'var(--peach)', borderRadius:999 }}></div>
-                {[
-                  ['Intent received', 'Dream: "laptop around ₹60,000"', 'ok'],
-                  ['Product selected', selectedProduct ? selectedProduct.name : '—', selectedProduct?'ok':'pending'],
-                  ['Affordability checked', ceiling ? `₹${ceiling}/mo (0.4× take-home)` : '—', ceiling?'ok':'pending'],
-                  ['Plan selected', selectedPlan ? `${selectedPlan.tenorMonths}mo @ ₹${selectedPlan.emi}` : '—', selectedPlan?'ok':'pending'],
-                  ['Approval requested', checkout ? 'User approved' : '—', checkout?'ok':'pending'],
-                  ['Payment initiated', checkout?.razorpayOrder ? checkout.razorpayOrder.id : '—', checkout?'ok':'pending'],
-                  ['Payment confirmed', checkout?.merchantOrder?.status==='paid'?'PAID (test-mode)':'—', checkout?.merchantOrder?.status==='paid'?'ok':'pending'],
-                ].map(([title, desc, status])=>(
-                  <div key={title} style={{ position:'relative', padding:'12px 0 12px 16px', display:'flex', gap:12, alignItems:'center' }}>
-                    <div style={{ position:'absolute', left:-20, width:12, height:12, borderRadius:'50%', background: status==='ok'?'var(--success)':'var(--cream-dark)', border:'2px solid white', boxShadow:'0 0 0 2px var(--peach)' }}></div>
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontWeight:600, fontSize:'0.9rem' }}>{title}</div>
-                      <div style={{ fontSize:'0.8rem', color:'var(--navy-soft)' }}>{desc}</div>
-                    </div>
-                    <div style={{ fontSize:'0.7rem', padding:'4px 8px', borderRadius:999, background: status==='ok'?'#ECFDF5':'var(--cream)', color: status==='ok'?'var(--success)':'var(--navy-soft)' }}>{status}</div>
-                  </div>
-                ))}
+            <div className="phone-grid" style={{marginTop:32}}>
+              <div className="phone">
+                <div className="phone-notch"><div className="phone-dot"/><div className="phone-dot"/><div className="phone-dot"/></div>
+                <div className="phone-body">
+                  <div className="label">FITEMI • AI Concierge</div>
+                  <h3 style={{marginTop:8}}>AI Buyer understands intent</h3>
+                  <p style={{fontSize:'0.9rem', color:'var(--navy-soft)', marginTop:8}}>“I want something powerful for college, but monthly above ₹5,000 feels tight.” → extracts category, price, comfort — no financial decision in frontend.</p>
+                  <div style={{marginTop:12, background:'var(--cream)', padding:12, borderRadius:12, fontSize:'0.85rem'}}>💬 {concierge}</div>
+                </div>
               </div>
-              <div style={{ marginTop:16, background:'var(--cream)', padding:12, borderRadius:12, fontSize:'0.75rem' }}>
-                <div style={{ fontWeight:600, marginBottom:4 }}>Recent audit entries (sanitized)</div>
-                {audit.length===0 ? <div style={{ color:'var(--navy-soft)' }}>No audit yet — make a request.</div> : audit.slice(0,3).map(a=>(
-                  <div key={a.requestId} style={{ fontFamily:'monospace', fontSize:'0.7rem', padding:'4px 0', borderBottom:'1px solid rgba(26,26,46,0.06)' }}>
-                    {new Date(a.timestamp).toLocaleTimeString()} • {a.method} {a.path} → {a.status} • {a.durationMs}ms • {a.requestId}
+              <div className="phone">
+                <div className="phone-notch"><div className="phone-dot"/><div className="phone-dot"/><div className="phone-dot"/></div>
+                <div className="phone-body">
+                  <div className="label">Merchant • Agent-readable</div>
+                  <h3>8 products • 3 merchants</h3>
+                  <p style={{fontSize:'0.9rem', color:'var(--navy-soft)', marginTop:8}}>TechHaven, Gadget Grove, FutureWorks — each product has price, availability, supported tenors, merchant.</p>
+                  <button className="btn btn-primary" style={{marginTop:12, width:'100%'}} onClick={()=>setTab('explore')}>Explore products</button>
+                </div>
+              </div>
+              <div className="phone">
+                <div className="phone-notch"><div className="phone-dot"/><div className="phone-dot"/><div className="phone-dot"/></div>
+                <div className="phone-body">
+                  <div className="label">Bounded • Gated • Audited</div>
+                  <h3>No payment without approval</h3>
+                  <p style={{fontSize:'0.9rem', color:'var(--navy-soft)', marginTop:8}}>Deterministic solver decides EMI/tenor/interest. LLM only explains. Every money action has requestId.</p>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {tab==='explore' && (
+          <>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:12}}>
+              <div><div className="label">Goal Market • Shop</div><h2>Find your thing</h2></div>
+              <div style={{display:'flex', gap:8}}>
+                <input placeholder="Search…" style={{padding:'10px 14px', borderRadius:999, border:'1px solid var(--line)', background:'white'}} onKeyDown={e=>e.key==='Enter'&&loadCatalog(e.target.value)} />
+                <button className="btn btn-soft" onClick={()=>loadCatalog('')}>All</button>
+                <button className="btn btn-ghost" onClick={()=>loadCatalog('laptop')}>Laptops</button>
+                <button className="btn btn-ghost" onClick={()=>loadCatalog('phone')}>Phones</button>
+              </div>
+            </div>
+            <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:16}}>
+              {catalog.map(p=>(
+                <div key={p.id} className={`product-object ${selected?.id===p.id?'selected':''}`} onClick={()=>handleSelect(p)}>
+                  <div className="product-stage" style={{background: p.color}}>
+                    {p.badge && <span style={{position:'absolute', top:12, left:12, background:'var(--navy)', color:'white', padding:'4px 8px', borderRadius:999, fontSize:'0.65rem', fontWeight:700}}>{p.badge}</span>}
+                    <span>{p.image}</span>
                   </div>
-                ))}
-                <button className="btn btn-ghost" style={{ fontSize:'0.75rem', marginTop:8 }} onClick={fetchAudit}>Refresh audit</button>
+                  <div style={{padding:16}}>
+                    <div className="label">{p.merchant?.name||p.merchantId} • {p.category}</div>
+                    <div style={{fontFamily:'Fraunces', fontWeight:700, fontSize:'1.1rem', marginTop:4}}>{p.name}</div>
+                    <div style={{display:'flex', gap:8, alignItems:'baseline', marginTop:6}}>
+                      <span style={{fontWeight:700, fontSize:'1.2rem'}}>₹{p.price.toLocaleString('en-IN')}</span>
+                      {p.originalPrice && <span style={{fontSize:'0.8rem', color:'var(--navy-soft)', textDecoration:'line-through'}}>₹{p.originalPrice.toLocaleString('en-IN')}</span>}
+                    </div>
+                    <div style={{fontSize:'0.8rem', color:'var(--navy-soft)', marginTop:6, lineHeight:1.4}}>{p.description}</div>
+                    <div style={{fontSize:'0.7rem', color:'var(--navy-soft)', marginTop:8}}>{p.availability}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {catalog.length===0 && <p style={{textAlign:'center', marginTop:24, color:'var(--navy-soft)'}}>No match — try “laptop” or “phone”.</p>}
+          </>
+        )}
+
+        {tab==='fit' && (
+          <>
+            {!selected ? (
+              <div style={{textAlign:'center', padding:48, background:'white', borderRadius:24, boxShadow:'var(--shadow-card)'}}>
+                <div style={{fontSize:'2.5rem'}}>🔍</div>
+                <h3>Pick a product to find your fit</h3>
+                <p style={{color:'var(--navy-soft)', marginTop:8}}>Affordability and EMI spectrum will appear here.</p>
+                <button className="btn btn-primary" style={{marginTop:16}} onClick={()=>setTab('explore')}>Choose product</button>
+              </div>
+            ) : (
+              <>
+                <div style={{display:'flex', gap:16, alignItems:'center', background:'white', padding:16, borderRadius:16, boxShadow:'var(--shadow-card)', flexWrap:'wrap'}}>
+                  <div style={{width:64, height:64, background:selected.color, borderRadius:16, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'2rem'}}>{selected.image}</div>
+                  <div style={{flex:1, minWidth:200}}>
+                    <div className="label">{selected.merchant?.name} • {selected.category}</div>
+                    <div style={{fontFamily:'Fraunces', fontWeight:700, fontSize:'1.2rem'}}>{selected.name}</div>
+                    <div style={{fontWeight:700}}>₹{selected.price.toLocaleString('en-IN')}</div>
+                  </div>
+                  <button className="btn btn-ghost" onClick={()=>setTab('explore')}>Change</button>
+                </div>
+
+                <div className="grid-2" style={{marginTop:20}}>
+                  <div className="compass-canvas">
+                    <div className="label">Affordability as environment</div>
+                    <h3>Comfort Zone</h3>
+                    <p style={{fontSize:'0.85rem', color:'var(--navy-soft)'}}>Backend is truth — frontend never decides.</p>
+                    {!ceiling ? (
+                      <>
+                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginTop:16}}>
+                          <input placeholder="Take-home ₹" type="number" value={afford.takeHomePay} onChange={e=>setAfford({...afford, takeHomePay:e.target.value})} style={{padding:12, borderRadius:12, border:'1px solid var(--line)'}} />
+                          <input placeholder="Obligations ₹" type="number" value={afford.existingObligations} onChange={e=>setAfford({...afford, existingObligations:e.target.value})} style={{padding:12, borderRadius:12, border:'1px solid var(--line)'}} />
+                          <input placeholder="Other ₹" type="number" value={afford.otherExpenses} onChange={e=>setAfford({...afford, otherExpenses:e.target.value})} style={{padding:12, borderRadius:12, border:'1px solid var(--line)'}} />
+                        </div>
+                        <button className="btn btn-primary" style={{marginTop:12, width:'100%'}} onClick={handleAfford} disabled={loading}>Calculate my comfort zone</button>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.7rem', fontWeight:700, marginTop:16}}>
+                          <span>TOO TIGHT</span><span>COMFORTABLE</span><span>STRETCHED</span>
+                        </div>
+                        <div className="compass-rail">
+                          <div className="compass-thumb" style={{left: `${Math.min(90, Math.max(10, (ceiling/8000)*100))}%`}}></div>
+                        </div>
+                        <div style={{textAlign:'center', marginTop:12}}>
+                          <div style={{fontFamily:'Fraunces', fontSize:'2rem', fontWeight:700}}>₹{ceiling.toLocaleString('en-IN')}<span style={{fontSize:'1rem', fontWeight:400}}>/mo</span></div>
+                          <div className="label">Comfort zone • 0.4× take-home − obligations • <button className="btn btn-ghost" style={{padding:'2px 6px', fontSize:'0.7rem'}} onClick={()=>{setCeiling(null); setPlans([]);}}>Recalculate</button></div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="spectrum-canvas">
+                    <div className="label">EMI Spectrum — signature</div>
+                    <h3>Lower monthly ←→ Lower interest</h3>
+                    {!ceiling ? <p style={{fontSize:'0.85rem', color:'var(--navy-soft)', marginTop:8}}>Set comfort zone to see spectrum.</p> :
+                    plans.length===0 ? (
+                      <div style={{textAlign:'center', padding:24, background:'var(--peach-light)', borderRadius:16, marginTop:12}}>
+                        <div style={{fontWeight:700}}>This purchase doesn't fit yet</div>
+                        <div style={{fontSize:'0.85rem', color:'var(--navy-soft)', marginTop:6}}>Your ₹{ceiling.toLocaleString('en-IN')}/mo is below the lowest feasible EMI.</div>
+                        <div style={{display:'flex', gap:8, justifyContent:'center', marginTop:12, flexWrap:'wrap'}}>
+                          <button className="btn btn-soft" onClick={()=>setTab('explore')}>Lower-priced</button>
+                          <button className="btn btn-ghost" onClick={()=>setWhatIf(1000)}>What if +₹1,000?</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="spectrum-rail">
+                          {plans.map((p,i)=>{
+                            const left=plans.length===1?50:(i/(plans.length-1))*100;
+                            return (
+                              <div key={p.lenderId+p.tenorMonths} className={`spectrum-node ${i===activePlan?'active':''}`} style={{left:`${left}%`}} onClick={()=>setActivePlan(i)}>
+                                {i===0&&<div className="spectrum-badge">★ YOUR FIT</div>}
+                                <div className="spectrum-dot"></div>
+                                <div style={{fontSize:'0.8rem', fontWeight:700}}>₹{p.emi.toLocaleString('en-IN')}</div>
+                                <div style={{fontSize:'0.7rem', color:'var(--navy-soft)'}}>{p.tenorMonths}mo</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.65rem', color:'var(--navy-soft)'}}><span>LOWER MONTHLY</span><span>LOWER INTEREST</span></div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {plans.length>0 && (
+                  <>
+                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginTop:16}}>
+                      <div style={{background:'white', borderRadius:16, padding:16, border:'1px solid var(--line)'}}>
+                        <div className="label">Trade-off Lab — financial instrument</div>
+                        <h4 style={{fontFamily:'Fraunces'}}>What matters more?</h4>
+                        <div style={{display:'flex', gap:6, marginTop:12, flexWrap:'wrap'}}>
+                          {['balanced','low-payment','low-interest','fast'].map(k=>(
+                            <button key={k} className={trade===k?'btn btn-primary':'btn btn-ghost'} style={{padding:'8px 12px', fontSize:'0.75rem'}} onClick={()=>setTrade(k)}>{k==='balanced'?'Balanced':k==='low-payment'?'Lower monthly':k==='low-interest'?'Lower interest':'Fastest'}</button>
+                          ))}
+                        </div>
+                        {plan && <div style={{marginTop:12, background:'var(--lilac-light)', padding:10, borderRadius:12, fontSize:'0.8rem'}}>Choosing <strong>{plan.tenorMonths}mo @ ₹{plan.emi.toLocaleString('en-IN')}</strong> vs next: diff {Math.abs(plan.tenorMonths-(plans[1]?.tenorMonths||plan.tenorMonths))}mo, ₹{Math.abs(plan.totalInterest-(plans[1]?.totalInterest||plan.totalInterest)).toLocaleString('en-IN')} interest.</div>}
+                      </div>
+                      <div style={{background:'white', borderRadius:16, padding:16, border:'1px solid var(--line)'}}>
+                        <div className="label">What-if Machine</div>
+                        <h4 style={{fontFamily:'Fraunces'}}>What if…</h4>
+                        <div style={{display:'flex', gap:6, marginTop:12, flexWrap:'wrap'}}>
+                          <button className={whatIf===-1000?'btn btn-primary':'btn btn-ghost'} style={{padding:'8px 10px', fontSize:'0.75rem'}} onClick={()=>setWhatIf(-1000)}>−₹1,000</button>
+                          <button className={whatIf===0?'btn btn-primary':'btn btn-ghost'} style={{padding:'8px 10px', fontSize:'0.75rem'}} onClick={()=>setWhatIf(0)}>Current</button>
+                          <button className={whatIf===500?'btn btn-primary':'btn btn-ghost'} style={{padding:'8px 10px', fontSize:'0.75rem'}} onClick={()=>setWhatIf(500)}>+₹500</button>
+                          <button className={whatIf===1000?'btn btn-primary':'btn btn-ghost'} style={{padding:'8px 10px', fontSize:'0.75rem'}} onClick={()=>setWhatIf(1000)}>+₹1,000</button>
+                        </div>
+                        <div style={{display:'grid', gridTemplateColumns:'1fr auto 1fr', gap:8, alignItems:'center', textAlign:'center', marginTop:12}}>
+                          <div style={{background:'var(--cream)', padding:10, borderRadius:12}}><div className="label">Current</div><div style={{fontWeight:700}}>₹{ceiling.toLocaleString('en-IN')}</div><div style={{fontSize:'0.7rem'}}>{plans.length} options</div></div>
+                          <div>→</div>
+                          <div style={{background:'var(--peach-light)', padding:10, borderRadius:12, border:'2px solid var(--peach)'}}><div className="label">New</div><div style={{fontWeight:700}}>₹{(ceiling+whatIf).toLocaleString('en-IN')}</div><div style={{fontSize:'0.7rem'}}>{whatIf===0?'— same':'recalculated'}</div></div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{background:'linear-gradient(135deg, white 0%, var(--lilac-light) 100%)', borderRadius:16, padding:20, border:'1px solid var(--line)', marginTop:16}}>
+                      <div className="label">Plan Explorer • Deep view — financial X-ray</div>
+                      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginTop:12}}>
+                        <div>
+                          <div style={{fontFamily:'Fraunces', fontSize:'2rem', fontWeight:700}}>₹{plan.emi.toLocaleString('en-IN')}<span style={{fontSize:'1rem', fontWeight:400}}>/mo</span></div>
+                          <div style={{fontSize:'0.85rem', color:'var(--navy-soft)'}}>{plan.tenorMonths} months • {plan.lenderId}</div>
+                          <div style={{marginTop:12, fontSize:'0.8rem'}}>
+                            <div style={{display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid var(--line)'}}><span>Principal</span><strong>₹{selected.price.toLocaleString('en-IN')}</strong></div>
+                            <div style={{display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid var(--line)'}}><span>Interest</span><strong>₹{plan.totalInterest.toLocaleString('en-IN')}</strong></div>
+                            <div style={{display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid var(--line)'}}><span>Fee</span><strong>₹499</strong></div>
+                            <div style={{display:'flex', justifyContent:'space-between', padding:'6px 0', fontWeight:700}}><span>Total</span><strong>₹{(plan.totalPaid+499).toLocaleString('en-IN')}</strong></div>
+                          </div>
+                          <div style={{marginTop:12, height:10, background:`linear-gradient(90deg, var(--navy) 0%, var(--navy) ${(selected.price/plan.totalPaid)*100}%, var(--peach) ${(selected.price/plan.totalPaid)*100}%, var(--peach) 100%)`, borderRadius:999}}></div>
+                          <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.65rem', marginTop:4}}><span>● Principal</span><span style={{color:'var(--peach)'}}>● Interest</span></div>
+                        </div>
+                        <div>
+                          <div style={{background:'white', padding:12, borderRadius:12, border:'1px solid var(--lilac)'}}>
+                            <div className="label">Why this plan?</div>
+                            <ul style={{paddingLeft:16, fontSize:'0.85rem', lineHeight:1.6, marginTop:6}}>
+                              <li>Fits your <strong>₹{ceiling.toLocaleString('en-IN')}/mo</strong> — ₹{plan.explanationFacts.monthlyHeadroom.toLocaleString('en-IN')} headroom</li>
+                              <li>{plan.explanationFacts.reason==='lowest_total_interest'?'Lowest total interest — fastest payoff':`Interest ₹${plan.totalInterest.toLocaleString('en-IN')}`}</li>
+                              <li>Rank {plan.explanationFacts.rank} of {plans.length} • {plan.tenorMonths}mo payoff</li>
+                            </ul>
+                            <div style={{fontSize:'0.65rem', color:'var(--navy-soft)', marginTop:8, fontStyle:'italic'}}>Deterministic • {plan.explanationFacts.reason}</div>
+                          </div>
+                          <div style={{marginTop:12, display:'grid', gridTemplateColumns:'1fr 1fr', gap:6}}>
+                            {plans.slice(1).map(p=>(
+                              <div key={p.lenderId} style={{background:'white', padding:10, borderRadius:12, border:'1px solid var(--line)', fontSize:'0.8rem'}}>
+                                <div style={{fontWeight:600}}>{p.lenderId} • {p.tenorMonths}mo</div>
+                                <div>₹{p.emi.toLocaleString('en-IN')}/mo • ₹{p.totalInterest.toLocaleString('en-IN')} interest</div>
+                                <div style={{fontSize:'0.7rem', color:'var(--navy-soft)', marginTop:4}}>{p.explanationFacts.reason}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{marginTop:16, display:'flex', gap:8}}>
+                        <button className="btn btn-primary" style={{flex:1}} onClick={()=>setTab('orders')}>Continue to checkout →</button>
+                        <button className="btn btn-soft" onClick={()=>window.scrollTo({top:0, behavior:'smooth'})}>Back to spectrum</button>
+                      </div>
+                    </div>
+
+                    <div style={{marginTop:16, display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px,1fr))', gap:12}}>
+                      {plans.map((p,i)=>(
+                        <div key={p.lenderId} style={{background:'white', borderRadius:16, padding:14, border: i===activePlan?'2px solid var(--navy)':'1px solid var(--line)', boxShadow: i===activePlan?'var(--shadow-card)':'none'}}>
+                          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                            <div style={{fontWeight:700, fontSize:'0.9rem'}}>{p.lenderId} • {p.tenorMonths}mo</div>
+                            {i===activePlan && <span style={{background:'var(--navy)', color:'white', padding:'2px 6px', borderRadius:999, fontSize:'0.6rem'}}>SELECTED</span>}
+                          </div>
+                          <div style={{fontFamily:'Fraunces', fontSize:'1.3rem', fontWeight:700, marginTop:6}}>₹{p.emi.toLocaleString('en-IN')}<span style={{fontSize:'0.8rem', fontWeight:400}}>/mo</span></div>
+                          <div style={{fontSize:'0.75rem', color:'var(--navy-soft)'}}>Interest ₹{p.totalInterest.toLocaleString('en-IN')} • Total ₹{p.totalPaid.toLocaleString('en-IN')}</div>
+                          <div style={{marginTop:8, background: i===0?'var(--peach-light)':'var(--cream)', padding:8, borderRadius:8, fontSize:'0.75rem'}}>
+                            <div style={{fontWeight:700, fontSize:'0.65rem', textTransform:'uppercase', letterSpacing:'0.05em'}}>Why this plan?</div>
+                            <div style={{marginTop:4}}>{p.explanationFacts.reasonLabel}</div>
+                          </div>
+                          <button className={i===activePlan?'btn btn-primary':'btn btn-ghost'} style={{width:'100%', marginTop:8, padding:'8px', fontSize:'0.8rem'}} onClick={()=>setActivePlan(i)}>{i===activePlan?'Selected':'Select'}</button>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {tab==='orders' && (
+          <>
+            {!plan || !selected ? (
+              <div style={{textAlign:'center', padding:48, background:'white', borderRadius:24, boxShadow:'var(--shadow-card)'}}>
+                <div style={{fontSize:'2.5rem'}}>🛒</div>
+                <h3>No checkout yet</h3>
+                <p style={{color:'var(--navy-soft)', marginTop:8}}>Pick a product and plan in My Fit.</p>
+                <button className="btn btn-primary" style={{marginTop:16}} onClick={()=>setTab('fit')}>Go to My Fit</button>
+              </div>
+            ) : (
+              <>
+                <div style={{maxWidth:560, margin:'0 auto', background:'white', borderRadius:24, overflow:'hidden', boxShadow:'var(--shadow-phone)', border:'1px solid var(--line)'}}>
+                  <div style={{background:'var(--navy)', color:'white', padding:20, textAlign:'center'}}>
+                    <div className="label" style={{color:'rgba(255,255,255,0.7)'}}>You are about to buy</div>
+                    <div style={{fontFamily:'Fraunces', fontSize:'1.6rem', fontWeight:700, marginTop:8}}>{selected.name}</div>
+                    <div style={{opacity:0.8}}>₹{selected.price.toLocaleString('en-IN')}</div>
+                  </div>
+                  <div style={{padding:20}}>
+                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, background:'var(--cream)', padding:16, borderRadius:16}}>
+                      <div><div className="label">Payment fit</div><div style={{fontFamily:'Fraunces', fontSize:'1.4rem', fontWeight:700}}>₹{plan.emi.toLocaleString('en-IN')}/mo</div><div style={{fontSize:'0.8rem', color:'var(--navy-soft)'}}>{plan.tenorMonths} months • {plan.lenderId}</div></div>
+                      <div><div className="label">Total</div><div style={{fontFamily:'Fraunces', fontSize:'1.4rem', fontWeight:700}}>₹{plan.totalPaid.toLocaleString('en-IN')}</div><div style={{fontSize:'0.8rem', color:'var(--navy-soft)'}}>Interest ₹{plan.totalInterest.toLocaleString('en-IN')}</div></div>
+                    </div>
+                    <div style={{background:'var(--lilac-light)', padding:12, borderRadius:12, marginTop:12, border:'1px solid var(--lilac)'}}>
+                      <div className="label">Why</div>
+                      <ul style={{paddingLeft:16, fontSize:'0.85rem', marginTop:6, lineHeight:1.6}}>
+                        <li>Within approved comfort ₹{ceiling?.toLocaleString('en-IN')}/mo (₹{plan.explanationFacts.monthlyHeadroom.toLocaleString('en-IN')} headroom)</li>
+                        <li>{plan.explanationFacts.reason==='lowest_total_interest'?'Lowest interest among matching options':plan.explanationFacts.reasonLabel}</li>
+                        <li>Deterministic solver — no LLM financial decision</li>
+                      </ul>
+                    </div>
+                    <div style={{display:'flex', gap:8, marginTop:16}}>
+                      <button className="btn btn-primary" style={{flex:1}} onClick={handleCheckout} disabled={loading}>{loading?'Processing…':'Approve payment'}</button>
+                      <button className="btn btn-ghost" onClick={()=>setTab('fit')}>Change plan</button>
+                    </div>
+                    <div style={{textAlign:'center', marginTop:8, fontSize:'0.7rem', color:'var(--navy-soft)'}}>🔒 Bounded — agent cannot charge without your approval</div>
+                  </div>
+                </div>
+
+                {checkout && (
+                  <div style={{maxWidth:560, margin:'16px auto 0', background: checkout.isSimulated?'var(--peach-light)':'#ECFDF5', border:`2px solid ${checkout.isSimulated?'var(--peach)':'var(--success)'}`, borderRadius:16, padding:16, textAlign:'center'}}>
+                    <div style={{fontSize:'1.2rem', fontWeight:700}}>{checkout.isSimulated?'✓ Simulated Test Order':'✓ Razorpay Test Order'}</div>
+                    <div style={{fontSize:'0.85rem', marginTop:4}}>{checkout.message}</div>
+                    <div style={{background:'white', padding:12, borderRadius:12, marginTop:12, textAlign:'left', fontSize:'0.8rem', fontFamily:'Fragment Mono'}}>
+                      Order {checkout.orderId}<br/>Razorpay {checkout.razorpayOrder.id}<br/>₹{checkout.razorpayOrder.amountInRupees?.toLocaleString('en-IN')} • {checkout.merchantOrder?.status}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{maxWidth:560, margin:'16px auto 0', background:'white', borderRadius:16, padding:16, border:'1px solid var(--line)'}}>
+                  <div className="label">Your orders</div>
+                  {orders.length===0 ? <p style={{fontSize:'0.85rem', color:'var(--navy-soft)', marginTop:8}}>No orders yet.</p> : orders.slice(0,4).map(o=>(
+                    <div key={o.id} style={{display:'flex', justifyContent:'space-between', padding:10, background:'var(--cream)', borderRadius:12, marginTop:8}}>
+                      <div><div style={{fontWeight:600, fontSize:'0.85rem'}}>{o.productName}</div><div style={{fontSize:'0.7rem', color:'var(--navy-soft)'}}>₹{o.plan.emi}/mo • {o.merchantName}</div></div>
+                      <div style={{textAlign:'right'}}><div style={{fontSize:'0.75rem', fontWeight:700, color: o.status==='paid'?'var(--success)':'var(--warning)'}}>{o.status}</div><div style={{fontSize:'0.7rem'}}>₹{o.amount.toLocaleString('en-IN')}</div></div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {tab==='merchant' && (
+          <>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
+              <div><div className="label">Merchant Console • TechHaven</div><h2>Activity Stream</h2></div>
+              <button className="btn btn-ghost" onClick={()=>{loadOrders(); loadAudit(); loadInsights();}}>Refresh</button>
+            </div>
+
+            <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(160px,1fr))', gap:12, marginBottom:16}}>
+              <div style={{background:'white', padding:16, borderRadius:16, textAlign:'center', border:'1px solid var(--line)'}}><div style={{fontFamily:'Fraunces', fontSize:'1.6rem', fontWeight:700}}>{orders.length}</div><div className="label">Total orders</div></div>
+              <div style={{background:'white', padding:16, borderRadius:16, textAlign:'center', border:'1px solid var(--line)'}}><div style={{fontFamily:'Fraunces', fontSize:'1.6rem', fontWeight:700, color:'var(--success)'}}>{orders.filter(o=>o.status==='paid').length}</div><div className="label">Paid (test-mode)</div></div>
+              <div style={{background:'white', padding:16, borderRadius:16, textAlign:'center', border:'1px solid var(--line)'}}><div style={{fontFamily:'Fraunces', fontSize:'1.6rem', fontWeight:700, color:'var(--warning)'}}>{orders.filter(o=>o.status==='awaiting_approval').length}</div><div className="label">Awaiting approval</div></div>
+              <div style={{background:'var(--peach-light)', padding:16, borderRadius:16, textAlign:'center'}}><div style={{fontFamily:'Fraunces', fontSize:'1.6rem', fontWeight:700}}>{insights?insights.real.conversionRate:'—'}</div><div className="label">Conversion</div></div>
+            </div>
+
+            <div className="phone-grid">
+              <div className="phone">
+                <div className="phone-notch"><div className="phone-dot"/><div className="phone-dot"/><div className="phone-dot"/></div>
+                <div className="phone-body">
+                  <div className="label">AI Buyer Activity</div>
+                  {orders.length===0 ? <p style={{fontSize:'0.85rem', color:'var(--navy-soft)', marginTop:8}}>No activity — create an order in Orders.</p> : orders.slice(0,5).map(o=>(
+                    <div key={o.id} style={{display:'flex', gap:10, padding:10, borderBottom:'1px solid var(--line)', alignItems:'center'}}>
+                      <div style={{width:32, height:32, background:'var(--lilac)', borderRadius:999, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.8rem'}}>🤖</div>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:600, fontSize:'0.8rem'}}>{o.status==='paid'?'PAID':'NEW AI BUYER'} — {o.productName}</div>
+                        <div style={{fontSize:'0.7rem', color:'var(--navy-soft)'}}>₹{o.plan.emi}/mo • {new Date(o.createdAt).toLocaleTimeString()}</div>
+                      </div>
+                      <div style={{fontSize:'0.6rem', padding:'4px 8px', borderRadius:999, background:o.status==='paid'?'#ECFDF5':'#FFFBEB', fontWeight:700}}>{o.status}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="phone">
+                <div className="phone-notch"><div className="phone-dot"/><div className="phone-dot"/><div className="phone-dot"/></div>
+                <div className="phone-body">
+                  <div className="label">Revenue Intelligence <span style={{background:'var(--lilac)', padding:'2px 6px', borderRadius:999, fontSize:'0.6rem', marginLeft:6}}>DEMO SYNTHETIC</span></div>
+                  {insights ? (
+                    <>
+                      {insights.syntheticInsights.map((ins,i)=>(
+                        <div key={i} style={{background:'var(--cream)', padding:10, borderRadius:12, marginTop:8, border:'1px solid var(--line)'}}>
+                          <div style={{fontSize:'0.8rem', fontWeight:600}}>💡 {ins.insight}</div>
+                          <div style={{fontSize:'0.65rem', color:'var(--navy-soft)', marginTop:4}}>{ins.source}</div>
+                          <div style={{fontSize:'0.75rem', color:'var(--success)', marginTop:4}}>→ {ins.action}</div>
+                        </div>
+                      ))}
+                      <div style={{fontSize:'0.6rem', color:'var(--navy-soft)', marginTop:8, fontStyle:'italic'}}>{insights.disclaimer}</div>
+                    </>
+                  ) : <p style={{fontSize:'0.8rem', color:'var(--navy-soft)'}}>Loading…</p>}
+                </div>
+              </div>
+
+              <div className="phone">
+                <div className="phone-notch"><div className="phone-dot"/><div className="phone-dot"/><div className="phone-dot"/></div>
+                <div className="phone-body">
+                  <div className="label">Audit / Trust Timeline</div>
+                  <div style={{position:'relative', paddingLeft:16, marginTop:8}}>
+                    <div style={{position:'absolute', left:4, top:0, bottom:0, width:2, background:'var(--peach)', borderRadius:999}}></div>
+                    {[
+                      ['Intent', intent?intent.category||'—':'—'],
+                      ['Discovery', selected?selected.name:'—'],
+                      ['Affordability', ceiling?`₹${ceiling}/mo`:'—'],
+                      ['Plan', plan?`${plan.tenorMonths}mo @ ₹${plan.emi}`:'—'],
+                      ['Approval', checkout?'Approved':'—'],
+                      ['Payment', checkout?.razorpayOrder?checkout.razorpayOrder.id.slice(0,12):'—'],
+                      ['Merchant', checkout?'Confirmed':'—'],
+                    ].map(([t,d])=>(
+                      <div key={t} style={{position:'relative', padding:'6px 0 6px 12px', display:'flex', justifyContent:'space-between'}}>
+                        <div style={{position:'absolute', left:-12, top:10, width:8, height:8, borderRadius:'50%', background: d!=='—'?'var(--success)':'var(--line)', border:'2px solid white'}}></div>
+                        <div style={{fontSize:'0.75rem', fontWeight:600}}>{t}</div>
+                        <div style={{fontSize:'0.7rem', color:'var(--navy-soft)', maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{d}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{marginTop:12, background:'var(--cream)', padding:8, borderRadius:12, fontSize:'0.65rem', fontFamily:'Fragment Mono'}}>
+                    {audit.slice(0,3).map(a=>(
+                      <div key={a.requestId} style={{padding:'4px 0', borderBottom:'1px solid var(--line)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{new Date(a.timestamp).toLocaleTimeString()} • {a.method} {a.path} → {a.status} • {a.requestId.slice(0,12)}</div>
+                    ))}
+                    <button className="btn btn-ghost" style={{fontSize:'0.65rem', marginTop:6, padding:'4px 8px'}} onClick={loadAudit}>Refresh</button>
+                  </div>
+                </div>
               </div>
             </div>
           </>
         )}
       </div>
 
-      <div style={{ textAlign:'center', padding:'24px 0 32px', fontSize:'0.75rem', color:'var(--navy-soft)', borderTop:'1px solid rgba(26,26,46,0.06)', marginTop:32 }}>
+      <div style={{textAlign:'center', padding:'24px 0 32px', fontSize:'0.7rem', color:'var(--navy-soft)', borderTop:'1px solid var(--line)', marginTop:32, fontFamily:'Fragment Mono'}}>
         FITEMI • AI-native payment-fit + commerce agent • Deterministic solver • Razorpay test-mode • Every money action explainable, bounded, gated
-      </div>
-    </div>
-  );
-}
-
-function AiConcierge({ msg }) {
-  return (
-    <div style={{ marginTop:20, background:'linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%)', color:'white', padding:16, borderRadius:16, display:'flex', gap:12, alignItems:'flex-start' }}>
-      <div style={{ width:36, height:36, background:'var(--peach)', borderRadius:999, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>🤖</div>
-      <div style={{ flex:1 }}>
-        <div style={{ fontSize:'0.75rem', fontWeight:700, letterSpacing:'0.05em', opacity:0.8 }}>FITEMI CONCIERGE</div>
-        <div style={{ fontSize:'0.9rem', marginTop:4, lineHeight:1.5 }}>{msg}</div>
       </div>
     </div>
   );
