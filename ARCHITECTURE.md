@@ -1,81 +1,100 @@
-# Architecture
+# Architecture — FITEMI Agentic Commerce
 
-FITEMI is deliberately bounded: deterministic money logic at the core, LLM that only explains, thin API that gates and logs, single-page frontend. The AI never decides a number; the solver never generates prose.
+FITEMI is an **AI-native payment-fit commerce agent**, not a calculator. One coherent product with many purposeful interactions, deterministic money reasoning, and a bounded payment gate.
 
-## Flows
+## Product Story Flow
 
 ```
-                    FITEMI UI
-                       │
-             ┌─────────┴─────────┐
-             │                   │
-       Know my number        I'm not sure
-             │                   │
-      Monthly budget       Affordability Q&A
-    (PurchaseForm)      (AffordabilityQuiz)
-             │                   │
-             └─────────┬─────────┘
-                       ↓
-                POST /api/recommend
-                       ↓
-                Input validation
-                       ↓
-              Affordability layer
-        (affordability.js — backend source of truth,
-         0.4 × takeHome − obligations, caps target)
-                       ↓
-                  EMI Solver
-              (emiSolver.js: findFeasiblePlans)
-                       ↓
-              Synthetic lenders
-           (lenders.js: 3 profiles, 3–24mo)
-                       ↓
-              Feasible / Decline
-    (feasible → ranked options; decline → minFeasibleEmi)
-                       ↓
-          Deterministic explanation facts
-    (per-plan: rank, headroom, reason, reasonLabel)
-                       ↓
-              Optional LLM wording
-           (llmAdvisor.js — polish only, never numbers)
-                       ↓
-                  Audit log
-         (auditLog.js middleware: requestId, durationMs)
-                       ↓
-                       UI
-         (PlanOptions: per-card Why; WhyPanel: global)
+Dream Discovery
+  "What's on your mind?" — natural language + prompts
+  ↓ POST /api/agent/parse → intent {category, maxPrice, targetMonthly}
+         │
+Merchant / Product Discovery
+  GET /api/catalog?q=laptop&maxPrice=65000 → 8 products, 3 merchants
+  Agent-readable catalog concept — AI buyer can filter
+         │
+Affordability Compass
+  Visual TOO TIGHT ← COMFORTABLE → STRETCHED
+  Inputs: takeHomePay, existingObligations → POST /api/recommend
+  Backend computes ceiling: 0.4 × take-home − obligations (truth)
+         │
+EMI Spectrum (signature)
+  LOWER MONTHLY ←————————→ LOWER TOTAL INTEREST
+  Plans from solver (real EMI/tenor/interest) along spectrum
+  Interactive ★ YOUR FIT — selection updates explanation
+         │
+Trade-off Lab
+  Controls: Monthly ↔ Interest ↔ Time
+  Re-ranks deterministically (no LLM)
+  “Lower monthly +₹847 headroom but +₹915 interest”
+         │
+What-if Simulator
+  CURRENT → NEW CONSTRAINT → NEW OPTIONS
+  What if budget ±₹1000 / pay 6mo sooner → POST /api/recommend with new target
+         │
+Deep Plan View
+  EMI/tenor/interest/total + fee + principal vs interest bar + timeline
+  Per-plan Why: Fits ₹X budget, lowest interest, rank
+  Alternatives
+         │
+Bounded Checkout
+  YOU ARE ABOUT TO PURCHASE — Approve gate
+  POST /api/checkout/create-order {productId, plan, amount, userApproval:true}
+  → validateCheckout guard → Razorpay test-mode orders.create → simulated if no keys
+         │
+Merchant Side
+  GET /api/merchant/orders → NEW AI BUYER / PAID
+  Revenue Intelligence — real orders + synthetic insights (labeled demo)
+         │
+Audit / Trust Timeline
+  Intent → Product → Affordability → Plan → Approval → Payment → Confirmed
+  GET /api/audit → {requestId, timestamp, method, path, status, durationMs}
 ```
+
+Navigation: **Home** (Dream + AI Buyer Mode) | **Explore** (Catalog) | **My Fit** (Compass + Spectrum + Trade-off + What-if + Deep Plan) | **Orders** (Checkout + Razorpay + Orders) | **Merchant** (Console + Insights + Audit) — contextual, not 10 separate dashboards.
 
 ## Components
 
-1. **EMI Solver (`server/src/lib/emiSolver.js:1`)** — `emiForTenor(P,r,n)` closed-form, `findFeasiblePlans(principal, target, lenders)` loops `n` from `minTenor` to `maxTenor`, picks smallest `n` with EMI ≤ target (fastest payoff = least interest), ranks by `totalInterest` (top 3). If no candidate, returns `feasible:false` with `minFeasibleEmi/minTenor/minLender` (lowest EMI at max tenor across all lenders). For feasible cases, each option is enriched with `explanationFacts: { monthlyPayment, targetBudget, monthlyHeadroom, totalInterest, tenor, rank, reason, reasonLabel }` deterministically — reasons include `lowest_total_interest`, `lowest_monthly_payment`, `best_budget_headroom`, `alternative_tenure`.
+**Backend — Deterministic Core (preserved):**
+- `emiSolver.js:1` — `emiForTenor`, `findFeasiblePlans` (smallest n that fits, rank by `totalInterest`, `explanationFacts` + `minFeasibleEmi` for decline)
+- `affordability.js:1` — `AFFORDABILITY_RATIO=0.4`, backend-only ceiling
+- `lenders.js:1` — 3 synthetic (A 1.25% 3-24mo, B 1.08% 6-18mo, C 1.5% 3-12mo)
+- `auditLog.js:31` — `auditMiddleware` (requestId, duration, sanitized, auto-creates `server/data/audit.log`)
 
-2. **Affordability Ceiling (`server/src/lib/affordability.js:1`)** — `computeAffordabilityCeiling({ takeHomePay, existingObligations }) => max(0, floor(0.4 × takeHomePay − existingObligations))` with named `AFFORDABILITY_RATIO = 0.4` (heuristic, not regulatory). Called **only** in `routes/recommend.js:65` (backend). Frontend `AffordabilityQuiz.jsx:1` and `PurchaseForm.jsx:1` collect inputs but never compute the ceiling; backend caps `targetMonthlyPayment` at ceiling (bounded & gated). This makes the backend the single source of truth.
+**Backend — Agentic Commerce (new):**
+- `catalog.js` — 8 products, 3 merchants, `searchCatalog`, `getCatalogForAgent`
+- `intentParser.js` — `parseIntentDeterministic` + `parseIntentWithLLM` (LLM enhance, never invent numbers)
+- `razorpay.js` — `createTestOrder` (real `Razorpay.orders.create` or `api.razorpay.com` or **simulated** `order_sim_…` with `isSimulated:true` boundary), `verifyPayment`, `isRazorpayConfigured`
+- `merchant.js` — in-memory `orders`, `createOrder`, `updateOrderStatus`, `getRevenueInsights` (real + synthetic labeled)
+- `agent.js` — `orchestrateAgent` (parse → ceiling → search → evaluate → bestFit), `validateCheckout` (product/price/plan/feasibility guard), `createDraftOrder`, `ALLOWED`/`REQUIRES_APPROVAL`/`DISALLOWED`
 
-3. **AI Layer (`server/src/lib/llmAdvisor.js:1`)** — Exactly 2 exports: `explainRecommendation(solverResult, inputs)` (prose only, uses exact numbers from solver, fallback template if `ANTHROPIC_API_KEY` missing) and `askAffordabilityQuestions(conversationSoFar)` (collects income/obligations, never decides tenor/EMI). Both share `callClaude()` isolated to this file (`model: claude-3-5-haiku-20241022`). LLM never influences `emi`, `tenor`, `interest`, `affordability`, `feasibility`, or ranking.
+**Backend — Routes:**
+- `routes/catalog.js` — `GET /api/catalog` (search), `GET /api/catalog/:id`, `GET /api/catalog/agent/readable`
+- `routes/agent.js` — `POST /api/agent/parse`, `POST /api/agent/orchestrate` (AI buyer mode), `POST /api/agent/draft-order`, `POST /api/agent/validate-checkout`
+- `routes/checkout.js` — `POST /api/checkout/create-order` (bounded, `userApproval` required), `POST /api/checkout/verify`, `POST /api/checkout/cancel`, `GET /api/checkout/status/:id`
+- `routes/merchant.js` — `GET /api/merchant/orders`, `GET /api/merchant/insights`, `GET /api/merchant/merchants`
+- `routes/recommend.js` — preserved legacy EMI path (validation → affordability → solver → LLM polish)
 
-4. **Audit Middleware (`server/src/lib/auditLog.js:31`)** — `auditMiddleware` runs for every request, assigns `requestId = req_${Date.now()}_${randomHex}`, wraps `res.json` to capture business outcome, and on `finish` appends one JSON line to `server/data/audit.log` with `{ timestamp, requestId, method, path, status, durationMs, feasible?, error?, targetMonthlyPayment?, affordabilityCeiling? }` plus a sanitized `requestSummary` (no API keys, no full financial payload). Directory/file are created automatically; `server/data/.gitkeep` ensures the directory exists in a fresh clone. `GET /api/audit` exposes the log for debugging.
+**Frontend — Warm 3D Design System:**
+- `styles/theme.css` — `cream #FFFBF5`, `peach #FFDAB9`, `lilac #E8E0FF`, `navy #1A1A2E`, `Space Grotesk` + `Inter`, `soft shadow`, `rounded`, `backdrop-blur` nav, responsive
+- `App.jsx:1` — single coherent product, 5 tabs, state for `dream/catalog/selectedProduct/plans/ceiling/tradeOff/whatIf/checkout/orders/audit`, `AiConcierge` contextual
+- Interactions: Dream input + prompt pills, catalog grid, compass track, spectrum track with ★, trade-off pills, what-if buttons, deep plan principal/interest bar, bounded checkout card, merchant feed, audit timeline
 
-5. **API (`server/src/index.js:1`, `server/src/routes/recommend.js:1`)** — Express with `cors`, `express.json()`, `auditMiddleware` first, then `/api/health`, `/api/recommend` (validation → affordability → solver → LLM polish → response), `/api/audit`. In production, `client/dist` is served statically on the same `PORT`. `.env` is loaded from the repo root (`../../.env`).
+**AI Design:**
+- Does: parse intent, ask affordability, explain facts, suggest “You’re ₹680 below target — pay sooner?”, launch comparisons
+- Never does: decide EMI/interest/tenor/ceiling/feasibility/ranking/amount/charge — those are solver/backend
+- Fallback: deterministic templates when no `ANTHROPIC_API_KEY`
 
-6. **Frontend (`client/src/`)** — Single page `App.jsx:1` → `PurchaseForm.jsx` (price + budget or "help me figure it out" → collects affordability inputs, sends `takeHomePay/existingObligations` to backend) → `AffordabilityQuiz.jsx` (3-step collector, no ceiling math) → `PlanOptions.jsx` (ranked cards, per-card `Why this plan?` from `explanationFacts`, no-feasible card with `Your budget` vs `Lowest feasible EMI` and remediation steps) → `WhyPanel.jsx` (global explanation + inputs). No extra routes.
-
-## Request Example
+## Data Flow — Example
 
 ```
-Browser                          Express (/api/recommend)
-  │                                     │
-  ├─ POST {itemPrice:24000,             │
-  │        takeHomePay:40000,            │── validateInputs
-  │        existingObligations:12000}    │── computeAffordabilityCeiling → 4000
-  │                                     │── cap target at 4000
-  │                                     │── findFeasiblePlans(24000,4000)
-  │                                     │   → [{lenderB 7mo 3578}, …] + facts
-  │                                     │── explainRecommendation (LLM or fallback)
-  │                                     │── auditMiddleware logs {requestId, durationMs, feasible:true}
-  │◄── {feasible:true, options:[{       │
-  │      emi, tenor, facts,             │
-  │      explanationFacts:{reasonLabel}}]} 
+User: "laptop around ₹60,000 at ₹5,000/mo"
+  → POST /api/agent/parse → {category:laptop, maxPrice:66000, targetMonthly:5000}
+  → GET /api/catalog?category=laptop&maxPrice=66000 → [ThinkPad X1 65000, MacBook Air 89900 filtered out]
+  → POST /api/recommend {itemPrice:65000, targetMonthlyPayment:5000} → 3 plans + facts
+  → UI: Spectrum with ★ YOUR FIT 6mo @ ₹4,152, Trade-off re-rank, What-if +₹1000 → new plans
+  → POST /api/checkout/create-order {productId:p2, plan, amount:65000, userApproval:true} → validateCheckout → Razorpay
+  → GET /api/merchant/orders → PAID, GET /api/audit → timeline
 ```
 
-All synthetic data lives as JSON under `server/data/`; no database or external payment APIs.
+All synthetic data under `server/data` + `server/src/lib/catalog.js`; no DB, no real bank calls.

@@ -157,11 +157,17 @@ async function apiChecks() {
     fail("Known-number flow", "skipped — server not reachable");
     fail("Affordability flow (backend source of truth)", "skipped — server not reachable");
     fail("No-feasible-plan flow", "skipped — server not reachable");
+    fail("Catalog discovery", "skipped — server not reachable");
+    fail("Agent intent parsing", "skipped — server not reachable");
+    fail("Bounded checkout", "skipped — server not reachable");
+    fail("Razorpay test order", "skipped — server not reachable");
+    fail("Merchant orders", "skipped — server not reachable");
     fail("Audit entries created (live)", "skipped — server not reachable");
     return;
   }
 
-  // Record audit count before
+  // Record audit count before (allow middleware to flush health)
+  await new Promise(r => setTimeout(r, 300));
   let auditBefore = 0;
   try {
     const auditPath = path.join(ROOT, "server", "data", "audit.log");
@@ -223,7 +229,88 @@ async function apiChecks() {
     fail("No-feasible-plan flow", e.message);
   }
 
-  // Audit entries created (live) — count should have increased
+  // Catalog discovery
+  try {
+    const res = await fetch(`${BASE}/api/catalog?q=laptop`);
+    const data = await res.json();
+    check("Catalog discovery", res.ok && Array.isArray(data.products) && data.products.length > 0, `${data.products?.length || 0} products`);
+    if (data.products?.length) {
+      const p = data.products[0];
+      check("  Catalog product has merchant/price", !!p.merchant && !!p.price && !!p.name);
+    }
+  } catch (e) { fail("Catalog discovery", e.message); }
+
+  // Agent intent parsing
+  try {
+    const res = await fetch(`${BASE}/api/agent/parse`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "I want a laptop around ₹60,000" })
+    });
+    const data = await res.json();
+    check("Agent intent parsing", res.ok && data.intent && data.intent.category === "laptop", `category:${data.intent?.category} maxPrice:${data.intent?.maxPrice}`);
+  } catch (e) { fail("Agent intent parsing", e.message); }
+
+  // Bounded checkout — requires approval
+  try {
+    const badRes = await fetch(`${BASE}/api/checkout/create-order`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productId: "p2", plan: { tenorMonths: 12, emi: 4320, totalInterest: 1000, totalPaid: 52000, lenderId: "lenderA" }, amount: 65000, userApproval: false })
+    });
+    const badData = await badRes.json();
+    check("Bounded checkout (requires approval)", badRes.status === 403 && !!badData.error, "403 without approval");
+  } catch (e) { fail("Bounded checkout", e.message); }
+
+  // Razorpay test order (simulated if no keys)
+  try {
+    // First get a real feasible plan for p2
+    const recRes = await fetch(`${BASE}/api/recommend`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemPrice: 65000, targetMonthlyPayment: 5000 })
+    });
+    const recData = await recRes.json();
+    if (recData.feasible && recData.options?.length) {
+      const plan = recData.options[0];
+      const chkRes = await fetch(`${BASE}/api/checkout/create-order`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: "p2",
+          plan: { tenorMonths: plan.tenorMonths, emi: plan.emi, totalInterest: plan.totalInterest, totalPaid: plan.totalPaid, lenderId: plan.lenderId },
+          amount: 65000,
+          buyer: { targetMonthlyPayment: 5000 },
+          userApproval: true
+        })
+      });
+      const chkData = await chkRes.json();
+      check("Razorpay test order", chkRes.ok && !!chkData.razorpayOrder, chkData.isSimulated ? "simulated (no keys)" : "real test-mode");
+      if (chkData.razorpayOrder) {
+        check("  Order has isTestMode", chkData.isTestMode === true);
+        check("  Merchant order created", !!chkData.orderId || !!chkData.merchantOrder);
+      }
+    } else {
+      fail("Razorpay test order", "no feasible plan for p2");
+    }
+  } catch (e) { fail("Razorpay test order", e.message); }
+
+  // Merchant orders/insights
+  try {
+    const res = await fetch(`${BASE}/api/merchant/orders`);
+    const data = await res.json();
+    check("Merchant orders", res.ok && Array.isArray(data.orders), `${data.orders?.length || 0} orders`);
+    const res2 = await fetch(`${BASE}/api/merchant/insights`);
+    const data2 = await res2.json();
+    check("Merchant insights", res2.ok && !!data2.real && Array.isArray(data2.syntheticInsights), `${data2.syntheticInsights?.length || 0} synthetic insights`);
+  } catch (e) { fail("Merchant orders", e.message); }
+
+  // Frontend per-card Why check (static)
+  try {
+    const planOptionsPath = path.join(ROOT, "client", "src", "components", "PlanOptions.jsx");
+    const content = fs.readFileSync(planOptionsPath, "utf-8");
+    const hasPerCardWhy = content.includes("Why this plan?") && content.includes("options.map") && content.includes("explanationFacts");
+    check("Frontend per-card Why (PlanOptions.jsx)", hasPerCardWhy, "Why inside options.map with facts");
+  } catch (e) { fail("Frontend per-card Why", e.message); }
+
+  // Audit entries created (live) — count should have increased (allow brief delay for middleware finish)
+  await new Promise(r => setTimeout(r, 300));
   try {
     const auditPath = path.join(ROOT, "server", "data", "audit.log");
     const content = fs.readFileSync(auditPath, "utf-8").trim();

@@ -4,6 +4,10 @@ import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 import recommendRouter from "./routes/recommend.js";
+import catalogRouter from "./routes/catalog.js";
+import agentRouter from "./routes/agent.js";
+import checkoutRouter from "./routes/checkout.js";
+import merchantRouter from "./routes/merchant.js";
 import { readAuditLog, auditMiddleware } from "./lib/auditLog.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -28,7 +32,13 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Recommend
+// Catalog & Agent & Checkout & Merchant (agentic commerce)
+app.use("/api/catalog", catalogRouter);
+app.use("/api/agent", agentRouter);
+app.use("/api/checkout", checkoutRouter);
+app.use("/api/merchant", merchantRouter);
+
+// Recommend (legacy EMI path, preserved)
 app.use("/api/recommend", recommendRouter);
 
 // Audit log (nice-to-have debug endpoint)
@@ -51,10 +61,16 @@ app.use("/api", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`EMI Agent server running on http://localhost:${PORT}`);
+  console.log(`FITEMI server running on http://localhost:${PORT}`);
+  console.log(`  Catalog: ${PORT ? 'ready' : '—'} | EMI solver: deterministic | Audit: middleware`);
   if (!process.env.ANTHROPIC_API_KEY) {
     console.log("  (ANTHROPIC_API_KEY not set — LLM advisor will use deterministic fallback)");
   } else {
     console.log("  (Anthropic API key configured)");
+  }
+  if (!process.env.RAZORPAY_KEY_ID) {
+    console.log("  (RAZORPAY_KEY_ID not set — checkout will use simulated test-mode)");
+  } else {
+    console.log("  (Razorpay test-mode configured)");
   }
 });
