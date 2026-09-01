@@ -5,7 +5,6 @@ export default function PurchaseForm({ onRecommend, loading }) {
   const [itemPrice, setItemPrice] = useState('');
   const [targetMonthly, setTargetMonthly] = useState('');
   const [showQuiz, setShowQuiz] = useState(false);
-  const [quizCeiling, setQuizCeiling] = useState(null);
   const [quizInputs, setQuizInputs] = useState(null);
   const [localError, setLocalError] = useState(null);
 
@@ -19,8 +18,8 @@ export default function PurchaseForm({ onRecommend, loading }) {
       return;
     }
 
-    // If quiz provided a ceiling, use affordability path
-    if (quizCeiling != null && quizInputs) {
+    // If quiz collected inputs, use affordability path — backend computes ceiling (source of truth)
+    if (quizInputs) {
       onRecommend({
         itemPrice: price,
         takeHomePay: quizInputs.takeHomePay,
@@ -39,8 +38,7 @@ export default function PurchaseForm({ onRecommend, loading }) {
     onRecommend({ itemPrice: price, targetMonthlyPayment: budget });
   };
 
-  const handleQuizComplete = (ceiling, inputs) => {
-    setQuizCeiling(ceiling);
+  const handleQuizComplete = (inputs) => {
     setQuizInputs(inputs);
     setShowQuiz(false);
   };
@@ -48,7 +46,6 @@ export default function PurchaseForm({ onRecommend, loading }) {
   const handleQuizCancel = () => setShowQuiz(false);
 
   const resetQuiz = () => {
-    setQuizCeiling(null);
     setQuizInputs(null);
     setTargetMonthly('');
   };
@@ -72,12 +69,14 @@ export default function PurchaseForm({ onRecommend, loading }) {
             />
           </div>
 
-          {quizCeiling != null ? (
+          {quizInputs ? (
             <div className="success-box">
-              Your safe monthly budget: <strong>₹{quizCeiling.toLocaleString('en-IN')}</strong>
+              Collected: take-home <strong>₹{quizInputs.takeHomePay?.toLocaleString('en-IN')}</strong>
+              {' · '} obligations <strong>₹{quizInputs.existingObligations?.toLocaleString('en-IN')}</strong>
+              {quizInputs.otherExpenses ? <> {' · '} other <strong>₹{quizInputs.otherExpenses?.toLocaleString('en-IN')}</strong></> : null}
               <br />
               <span style={{ fontSize: '0.85rem', color: '#555' }}>
-                Based on take-home ₹{quizInputs.takeHomePay?.toLocaleString('en-IN')} minus obligations ₹{quizInputs.existingObligations?.toLocaleString('en-IN')}
+                We'll compute your safe monthly budget on the server (backend is the source of truth).
               </span>
               <br />
               <button type="button" className="link-btn" onClick={resetQuiz}>Change / enter manually instead</button>

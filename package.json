@@ -1,0 +1,21 @@
+{
+  "name": "fitemi",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
+    "build": "npm run build --workspace=client",
+    "start": "npm start --workspace=server",
+    "batch-eval": "npm run batch-eval --workspace=server",
+    "verify": "node scripts/verify-demo.js",
+    "generate-shoppers": "npm run generate-shoppers --workspace=server"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

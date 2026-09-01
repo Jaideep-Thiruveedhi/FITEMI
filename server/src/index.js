@@ -4,12 +4,13 @@ import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 import recommendRouter from "./routes/recommend.js";
-import { readAuditLog } from "./lib/auditLog.js";
+import { readAuditLog, auditMiddleware } from "./lib/auditLog.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load .env from server/.env and also root .env
+// Load .env from repo root, then server/.env, then cwd — root is the single source of truth
+dotenv.config({ path: path.join(__dirname, "../../.env") });
 dotenv.config({ path: path.join(__dirname, "../.env") });
 dotenv.config();
 
@@ -18,6 +19,9 @@ const PORT = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(express.json());
+
+// Audit middleware — logs every request with requestId, duration, sanitized summary
+app.use(auditMiddleware);
 
 // Health
 app.get("/api/health", (req, res) => {

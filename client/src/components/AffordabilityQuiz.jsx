@@ -34,9 +34,8 @@ export default function AffordabilityQuiz({ onComplete, onCancel }) {
     if (step < questions.length - 1) {
       setStep(step + 1);
     } else {
-      // Done — compute ceiling
-      const ceiling = Math.max(0, Math.floor(0.4 * Number(takeHomePay) - Number(existingObligations)));
-      onComplete(ceiling, {
+      // Done — pass collected inputs; backend is the source of truth for affordability ceiling
+      onComplete({
         takeHomePay: Number(takeHomePay),
         existingObligations: Number(existingObligations),
         otherExpenses: Number(otherExpenses) || 0,

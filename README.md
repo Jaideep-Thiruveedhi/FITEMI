@@ -1,184 +1,232 @@
-# Affordability-Matched EMI Agent — Track 01
+# FITEMI — Affordability-Matched EMI Agent
 
 For **Razorpay AI Buildathon — Track 01 (AI Growth & Agentic Commerce)**  
 Built by: Jaideep, using Muse Code / Muse Spark 1.2
 
-A checkout agent that replaces fixed EMI tenure buttons (6/12/24 months) with a single question: **"how much can you actually pay per month?"** It solves for the shortest tenor that fits, offers nearby alternatives, and — for buyers who don't know their number — runs a short affordability Q&A to propose a safe ceiling. When no tenor can responsibly fit, it says so clearly instead of forcing a bad plan. Every recommendation is explainable and logged.
+FITEMI replaces fixed EMI tenure buttons (6/12/24 months) with one question: **"how much can you actually pay per month?"** It solves for the shortest tenor that fits (least total interest), offers ranked alternatives each with its own deterministic "why", and — for buyers who don't know their number — runs a short affordability Q&A where the **backend** computes a safe ceiling (`0.4 × take-home − obligations`). When nothing fits, it says so clearly with the lowest feasible EMI, instead of forcing a bad plan. Every recommendation is explainable, bounded, and audit-logged.
 
-## The Problem (2–3 sentences)
+> Core principle: *Don't recommend an EMI just because it exists. Recommend it only when it fits the user's budget, explain why, and honestly say no when nothing feasible exists.*
 
-Standard checkout forces buyers into fixed tenures. A salaried buyer with ₹5,000/mo free for a ₹24,000 phone might pay more total interest than needed on a forced 6-month plan, while another with ₹3,000/mo gets declined outright even though a 9-month plan would work. This agent fixes both: it finds the *fastest payoff that fits* the buyer's real budget, or honestly declines when nothing fits.
+## Features
 
-## How to Run Locally
+- **EMI recommendation** — deterministic solver across 3 synthetic lenders, ranked by total interest
+- **Affordability flow** — backend is the source of truth for ceiling calculation
+- **No-feasible-plan handling** — graceful decline with `minFeasibleEmi`, not a crash or hallucinated plan
+- **Explainable recommendations** — per-plan deterministic facts (`reason`, `headroom`, `rank`) + optional LLM polish; LLM never decides numbers
+- **Deterministic financial calculations** — closed-form EMI, no LLM in the money path
+- **Optional AI explanations** — `llmAdvisor.js` isolated to 2 functions, falls back deterministically without `ANTHROPIC_API_KEY`
+- **Audit logging** — middleware logs every request with `requestId`, `durationMs`, sanitized outcome; `server/data/audit.log` (gitignored)
+- **Batch evaluation** — 60 synthetic shoppers, `docs/batch-eval-report.md` with feasibility rate and declined audit trail
 
-### Prerequisites
-- Node.js 18+ and npm
-
-### 1. Clone & install
+## Quick Start
 
 ```bash
-git clone <repo-url>
-cd "Dristi AI"
-
-# Server
-cd server && npm install && cd ..
-
-# Client
-cd client && npm install && cd ..
+git clone https://github.com/Jaideep-Thiruveedhi/FITEMI.git
+cd FITEMI
+cp .env.example .env
+# Edit .env and set ANTHROPIC_API_KEY (optional — fallback works without it)
+npm install
+npm run dev
 ```
 
-### 2. Environment variables
+Open http://localhost:5173 (Vite proxies `/api` to http://localhost:4000). No second terminal required — `npm run dev` at the root starts both frontend and backend via `concurrently`.
+
+**Production:**
 
 ```bash
-# From repo root
-copy .env.example server\.env
-# Edit server/.env and set your key:
-# ANTHROPIC_API_KEY=sk-ant-xxxxxxxx
-# PORT=4000
+npm run build   # builds client to client/dist
+npm start       # serves API + static client/dist on PORT (default 4000)
 ```
 
-> The LLM advisor works with or without a key. Without `ANTHROPIC_API_KEY` it falls back to deterministic plain-language explanations. No key is ever committed — `.env` is gitignored from the first commit.
+Works on macOS, Linux, and Windows (use `copy .env.example .env` on Windows, or `cp` on Unix).
 
-### 3. Generate synthetic data & run batch eval (optional but recommended)
+## Environment Variables
+
+All env vars live at the repository root (`.env`). Only one value needs to be set:
+
+| Variable | Required | Description |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | No | For LLM-polished explanations. If unset, deterministic fallback is used. Never exposed to the frontend. |
+| `PORT` | No | Backend port (default `4000`). Frontend Vite proxy follows this. |
+
+`.env` is gitignored. `.env.example` contains placeholders only (`sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`). No secrets are committed. The server loads `.env` from the repo root (`server/src/index.js:13`).
+
+## Demo Flow — 60-Second Judge Walkthrough
+
+### Demo A — I know my number
+
+1. Enter **Item price:** `24000`
+2. Enter **How much can you pay per month:** `5000`
+3. Click **Find my EMI plans**
+
+→ **Expected:** 3 ranked plans. Best is `lenderA 5 months @ ₹4,981.49` (lowest interest). Each card shows **Why this plan?** with its own reason (`lowest_total_interest`, `lowest_monthly_payment`, etc.) and headroom. Global "why" panel shows inputs. Request is audit-logged.
 
 ```bash
-cd server
-node scripts/generateShoppers.js   # generates 60 shoppers -> server/data/shoppers.json
-node scripts/runBatchEval.js       # evaluates all 60 -> docs/batch-eval-report.md
-cd ..
+curl -X POST http://localhost:4000/api/recommend \
+  -H "Content-Type: application/json" \
+  -d '{"itemPrice":24000,"targetMonthlyPayment":5000}'
 ```
 
-### 4. Start the stack (two terminals)
+### Demo B — I'm not sure
+
+1. Click **Not sure? Help me figure it out**
+2. Step 1: `40000` (take-home), Step 2: `12000` (obligations), Step 3: `5000` (other)
+3. Click **Done** → summary shows collected inputs (ceiling computed on backend, not frontend)
+4. Enter **Item price:** `24000` → **Find my EMI plans**
+
+→ **Expected:** Backend computes ceiling `₹4,000` (`0.4×40000−12000`), shows affordability ceiling badge, returns feasible plans capped at ceiling. Frontend never decides the ceiling.
 
 ```bash
-# Terminal 1 — backend (http://localhost:4000)
-cd server && npm run dev
-
-# Terminal 2 — frontend (httpermalhost:5173)
-cd client && npm run dev
+curl -X POST http://localhost:4000/api/recommend \
+  -H "Content-Type: application/json" \
+  -d '{"itemPrice":24000,"takeHomePay":40000,"existingObligations":12000}'
 ```
 
-Open http://localhost:5173. The Vite dev server proxies `/api` to `http://localhost:4000`.
+### Demo C — No feasible plan
 
-### 5. Production build (optional)
+1. Enter **Item price:** `24000`
+2. Enter **Budget:** `500`
+3. Click **Find my EMI plans**
+
+→ **Expected:** `feasible: false` card:
+```
+No feasible plan
+Your budget: ₹500/month
+Lowest feasible EMI: ₹1,163.68/month (18 months, lenderB)
+We won't recommend a plan that exceeds your stated budget.
+Try: increasing your monthly budget / lower-priced item / larger down payment
+```
+Solver (not hard-coded) computed `minFeasibleEmi`.
 
 ```bash
-cd client && npm run build
-# Then visit http://localhost:4000 — Express serves client/dist statically
+curl -X POST http://localhost:4000/api/recommend \
+  -H "Content-Type: application/json" \
+  -d '{"itemPrice":24000,"targetMonthlyPayment":500}'
 ```
 
 ## API
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/recommend` | Main recommendation endpoint |
-| `POST` | `/api/recommend/quiz` | Step-by-step affordability Q&A |
+| `POST` | `/api/recommend` | Main recommendation (see demos above) |
+| `POST` | `/api/recommend/quiz` | Step-by-step affordability Q&A (optional) |
 | `GET` | `/api/audit` | Debug: returns audit log as JSON |
 | `GET` | `/api/health` | Health check |
 
-### `POST /api/recommend` — request body
-
-```json
-{
-  "itemPrice": 24000,
-  "targetMonthlyPayment": 5000
-}
-```
-or with affordability:
-```json
-{
-  "itemPrice": 24000,
-  "takeHomePay": 40000,
-  "existingObligations": 12000,
-  "otherExpenses": 5000
-}
-```
-or with conversation history:
-```json
-{
-  "itemPrice": 24000,
-  "conversationHistory": [{ "role": "user", "content": "45000" }]
-}
-```
-
-Response includes `feasible`, `options` (up to 3 ranked by total interest), `explanation`, and `meta`. Every call — success or decline — appends one JSON line to `server/data/audit.log` before responding.
+Every `POST /api/recommend` is logged by middleware (`server/src/lib/auditLog.js:31`) with `requestId`, `method`, `path`, `status`, `durationMs` before the response returns. No API keys are logged.
 
 ## Batch Evaluation
 
-`server/scripts/runBatchEval.js` loads `server/data/shoppers.json`, runs every record through the same solver logic the API uses, and writes `docs/batch-eval-report.md`:
+```bash
+npm run batch-eval
+# also: npm run batch-eval --workspace=server
+# or:   node server/scripts/runBatchEval.js
+```
 
-- Total evaluated, feasible vs. declined counts
-- Average tenor and average total interest (feasible only)
-- **Full declined list with specific reasons** — the audit trail proving honesty
+Loads `server/data/shoppers.json` (60 shoppers, 4 buckets: comfortable/tight/infeasible/no_budget) through the same solver the API uses and writes `docs/batch-eval-report.md`:
 
-Latest run: **38/60 feasible (63.3%), avg tenor 13.2mo, avg interest ₹3,518**. See `docs/batch-eval-report.md`.
+- Total evaluated, feasible vs. declined, feasibility %
+- Average tenor and average interest (feasible only)
+- Bucket breakdown
+- Full feasible list and **declined audit trail** (most important section)
 
-## Known Failure Handling
+Latest run: **38/60 feasible (63.3%, avg 13.2mo, avg ₹3,518)** — see `docs/batch-eval-report.md`.
 
-The API never crashes or hallucinates a plan on bad input. Validated manually:
+## Verification
 
-| Input | Response |
-|---|---|
-| `itemPrice: -5000, targetMonthlyPayment: 3000` | `400 { error: "itemPrice must be greater than 0." }` — logged to audit.log |
-| `itemPrice: 24000, targetMonthlyPayment: 0` | `400 { error: "Monthly budget must be greater than 0. Based on your affordability inputs, there is no room for additional EMI." }` |
-| `itemPrice: 24000, takeHomePay: 20000, existingObligations: 25000` | `400 { error: "Existing obligations exceed take-home pay — no room for additional EMI." }` |
-| `itemPrice: 24000, targetMonthlyPayment: 500` (below min EMI) | `200 { feasible: false, reason: "No lender can offer a plan within your monthly budget..." }` — graceful "no feasible plan" card in UI |
+```bash
+npm run verify
+# runs scripts/verify-demo.js
+```
 
-All four return specific validation messages; none silently substitute defaults. Every case is appended to `audit.log`.
+Checks:
+
+```
+✓ Server health
+✓ Known-number flow (with per-plan Why)
+✓ Affordability flow (backend source of truth)
+✓ No-feasible-plan flow (min EMI + graceful reason)
+✓ Audit logging (file, requestId, sanitized)
+✓ Batch evaluation (60 shoppers, report)
+✓ Client build
+✓ Environment configuration
+```
+
+Exits non-zero if a critical check fails. Example success:
+
+```
+FITEMI Definition of Done
+─────────────────────────
+
+✓ Environment configuration — .env.example exists
+...
+✓ Server health — http://localhost:4000/api/health
+✓ Known-number flow — ₹24000 @ ₹5000 → 5mo
+✓ Affordability flow — ceiling ₹4000 (expected 4000)
+✓ No-feasible-plan flow — ₹24000 @ ₹500 → feasible:false
+✓ Audit entries created (live)
+
+31/31 checks passed
+All checks passed ✓
+```
+
+The script starts from a fresh clone: `server/data/.gitkeep` ensures the audit directory exists; `audit.log` is created automatically.
 
 ## Tech Stack
 
 - **Backend:** Node.js + Express, plain JavaScript (ES modules)
 - **Frontend:** React 18 + Vite, plain CSS
-- **Data:** JSON files under `server/data/`, append-only JSON-lines audit log
-- **AI layer:** Single wrapper `server/src/lib/llmAdvisor.js` (Anthropic Claude Messages API, key from env, deterministic fallback)
-- **No real bank/NBFC/payment calls** — lenders are synthetic (3 profiles)
+- **Data:** JSON under `server/data/`, append-only `audit.log` (JSON-lines)
+- **AI:** `server/src/lib/llmAdvisor.js` — 2 functions only, Anthropic Claude Haiku, deterministic fallback
+- **No real bank/NBFC calls** — 3 synthetic lenders
 
 ## Repository Structure
 
 ```
-├── README.md
-├── ARCHITECTURE.md
-├── DECISIONS.md
-├── .env.example
-├── .gitignore
+FITEMI/
+├── package.json          # root workspaces + concurrently dev
+├── .env.example          # ANTHROPIC_API_KEY placeholder
+├── scripts/
+│   └── verify-demo.js    # Definition of Done verifier
 ├── server/
-│   ├── package.json
 │   ├── src/
-│   │   ├── index.js
-│   │   ├── routes/recommend.js
+│   │   ├── index.js              # Express + auditMiddleware + static client/dist
+│   │   ├── routes/recommend.js   # validation + affordability gating + solver
 │   │   └── lib/
-│   │       ├── emiSolver.js
-│   │       ├── lenders.js
-│   │       ├── affordability.js
-│   │       ├── llmAdvisor.js
-│   │       └── auditLog.js
+│   │       ├── emiSolver.js      # emiForTenor + findFeasiblePlans + facts + min EMI
+│   │       ├── lenders.js        # 3 synthetic lenders
+│   │       ├── affordability.js  # 0.4 ceiling (backend source of truth)
+│   │       ├── llmAdvisor.js     # explainRecommendation + askAffordabilityQuestions
+│   │       └── auditLog.js       # auditMiddleware (requestId, duration, sanitized)
 │   ├── data/
-│   │   ├── shoppers.json
-│   │   └── audit.log
+│   │   ├── .gitkeep
+│   │   ├── shoppers.json (60)
+│   │   └── audit.log (ignored, created at runtime)
 │   └── scripts/
 │       ├── generateShoppers.js
 │       └── runBatchEval.js
 ├── client/
-│   ├── package.json
-│   └── src/
-│       ├── App.jsx
-│       └── components/
-│           ├── PurchaseForm.jsx
-│           ├── AffordabilityQuiz.jsx
-│           ├── PlanOptions.jsx
-│           └── WhyPanel.jsx
+│   ├── src/
+│   │   ├── App.jsx
+│   │   └── components/
+│   │       ├── PurchaseForm.jsx      # collects only, no ceiling calc
+│   │       ├── AffordabilityQuiz.jsx # collects inputs, backend decides
+│   │       ├── PlanOptions.jsx       # per-plan Why + no-feasible with min EMI
+│   │       └── WhyPanel.jsx
+│   └── vite.config.js (proxy /api → :4000)
 └── docs/
     └── batch-eval-report.md
 ```
 
-## Definition of Done — Checklist
+## Known Failure Handling
 
-- [x] Install + start both server and client with no manual steps beyond setting the API key
-- [x] Both "I know my number" and "I'm not sure" flows work end-to-end in the browser
-- [x] At least one live case produces a "no feasible plan" result, shown gracefully
-- [x] `runBatchEval.js` has been run and `docs/batch-eval-report.md` exists with real numbers from 60 synthetic shoppers
-- [x] Every recommendation shown in the UI has a visible "why"
-- [x] `audit.log` exists and contains an entry for every request made during testing
-- [x] README, ARCHITECTURE.md, and DECISIONS.md are all present and accurate
-- [x] No secrets committed; `.env.example` present
+Never crashes or hallucinates on bad input:
+
+| Input | Response |
+|---|---|
+| `itemPrice: -5000` | `400 { error: "itemPrice must be greater than 0." }` |
+| `targetMonthlyPayment: 0` | `400 { error: "Monthly budget must be greater than 0..." }` |
+| `takeHomePay: 20000, existingObligations: 25000` | `400 { error: "Existing obligations exceed take-home pay..." }` |
+| `itemPrice: 24000, targetMonthlyPayment: 500` | `200 { feasible:false, minFeasibleEmi:1163.68, ... }` |
+
+All are audit-logged via middleware.

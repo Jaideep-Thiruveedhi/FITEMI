@@ -52,12 +52,67 @@ export function findFeasiblePlans(principal, targetMonthlyPayment, lenders) {
   }
 
   if (candidates.length === 0) {
-    return { feasible: false, reason: "No lender can offer a plan within your monthly budget. Even the longest available tenor exceeds what you can pay." };
+    // Compute the absolute lowest EMI achievable across all lenders (at max tenor) for helpful "no feasible" UI
+    let minEmi = Infinity;
+    let minTenor = null;
+    let minLender = null;
+    for (const lender of lenders) {
+      const emi = emiForTenor(principal, lender.monthlyRate, lender.maxTenor);
+      if (emi < minEmi) {
+        minEmi = emi;
+        minTenor = lender.maxTenor;
+        minLender = lender.id;
+      }
+    }
+    return {
+      feasible: false,
+      reason: "No lender can offer a plan within your monthly budget. Even the longest available tenor exceeds what you can pay.",
+      minFeasibleEmi: Math.round(minEmi * 100) / 100,
+      minFeasibleTenor: minTenor,
+      minFeasibleLender: minLender,
+    };
   }
 
   // Rank by total interest ascending (cheapest first)
   candidates.sort((a, b) => a.totalInterest - b.totalInterest);
 
-  // Return up to 3 best options
-  return { feasible: true, options: candidates.slice(0, 3) };
+  // Enrich each candidate with deterministic explanation facts (never LLM-generated)
+  const ranked = candidates.slice(0, 3).map((opt, idx, arr) => {
+    const monthlyHeadroom = Math.round((targetMonthlyPayment - opt.emi) * 100) / 100;
+    let reason;
+    let reasonLabel;
+    if (idx === 0) {
+      reason = "lowest_total_interest";
+      reasonLabel = `Lowest total interest among plans that fit your ₹${targetMonthlyPayment.toLocaleString("en-IN")} budget — fastest payoff that stays within budget.`;
+    } else if (opt.emi === Math.min(...arr.map((o) => o.emi))) {
+      reason = "lowest_monthly_payment";
+      reasonLabel = `Lowest monthly payment — more headroom (₹${monthlyHeadroom.toLocaleString("en-IN")}/mo spare), but higher total interest than the fastest option.`;
+    } else if (monthlyHeadroom > 500) {
+      reason = "best_budget_headroom";
+      reasonLabel = `Comfortable headroom of ₹${monthlyHeadroom.toLocaleString("en-IN")}/mo left in your budget, at the cost of higher total interest.`;
+    } else {
+      reason = "alternative_tenure";
+      reasonLabel = `Alternative tenure with higher total interest than the best option — trade shorter payoff for lower monthly amount.`;
+    }
+    // Shortest tenure distinction (if multiple have same interest ordering, shortest is best)
+    if (idx === 0) {
+      // best_overall also implies shortest tenure among cheapest — but we keep lowest_total_interest as primary
+    }
+    return {
+      ...opt,
+      explanationFacts: {
+        monthlyPayment: opt.emi,
+        targetBudget: targetMonthlyPayment,
+        monthlyHeadroom,
+        totalInterest: opt.totalInterest,
+        totalPaid: opt.totalPaid,
+        tenor: opt.tenorMonths,
+        rank: idx + 1,
+        reason,
+        reasonLabel,
+      },
+    };
+  });
+
+  return { feasible: true, options: ranked };
 }

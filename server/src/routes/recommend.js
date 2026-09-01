@@ -3,7 +3,6 @@ import { findFeasiblePlans } from "../lib/emiSolver.js";
 import { lenders } from "../lib/lenders.js";
 import { computeAffordabilityCeiling, validateAffordabilityInputs } from "../lib/affordability.js";
 import { explainRecommendation, askAffordabilityQuestions } from "../lib/llmAdvisor.js";
-import { appendAuditLog } from "../lib/auditLog.js";
 
 const router = express.Router();
 
@@ -17,13 +16,6 @@ const router = express.Router();
  */
 router.post("/", async (req, res) => {
   const startedAt = Date.now();
-  let auditEntry = {
-    endpoint: "/api/recommend",
-    requestBody: req.body,
-    result: null,
-    error: null,
-    feasible: null,
-  };
 
   try {
     const { itemPrice, targetMonthlyPayment, takeHomePay, existingObligations, otherExpenses, conversationHistory } = req.body;
@@ -31,20 +23,14 @@ router.post("/", async (req, res) => {
     // --- Validation: itemPrice ---
     if (itemPrice == null) {
       const err = "itemPrice is required.";
-      auditEntry.error = err;
-      appendAuditLog(auditEntry);
       return res.status(400).json({ error: err });
     }
     if (typeof itemPrice !== "number" || isNaN(itemPrice)) {
       const err = "itemPrice must be a number.";
-      auditEntry.error = err;
-      appendAuditLog(auditEntry);
       return res.status(400).json({ error: err });
     }
     if (itemPrice <= 0) {
       const err = "itemPrice must be greater than 0.";
-      auditEntry.error = err;
-      appendAuditLog(auditEntry);
       return res.status(400).json({ error: err });
     }
 
@@ -60,8 +46,6 @@ router.post("/", async (req, res) => {
       // Conversation-based affordability flow
       const quizResponse = await askAffordabilityQuestions(conversationHistory);
       if (!quizResponse.isComplete) {
-        auditEntry.result = "quiz_incomplete";
-        appendAuditLog(auditEntry);
         return res.json({
           quizInProgress: true,
           nextQuestion: quizResponse.nextQuestion,
@@ -76,8 +60,6 @@ router.post("/", async (req, res) => {
       // Direct affordability inputs
       const validation = validateAffordabilityInputs({ takeHomePay, existingObligations, otherExpenses });
       if (!validation.valid) {
-        auditEntry.error = validation.error;
-        appendAuditLog(auditEntry);
         return res.status(400).json({ error: validation.error });
       }
       affordabilityCeiling = computeAffordabilityCeiling({ takeHomePay, existingObligations, otherExpenses });
@@ -85,8 +67,6 @@ router.post("/", async (req, res) => {
       if (effectiveTarget != null) {
         if (typeof effectiveTarget !== "number" || isNaN(effectiveTarget)) {
           const err = "targetMonthlyPayment must be a number.";
-          auditEntry.error = err;
-          appendAuditLog(auditEntry);
           return res.status(400).json({ error: err });
         }
         if (effectiveTarget > affordabilityCeiling) {
@@ -100,20 +80,14 @@ router.post("/", async (req, res) => {
     // Validate effectiveTarget
     if (effectiveTarget == null) {
       const err = "Provide either targetMonthlyPayment or affordability details (takeHomePay + existingObligations).";
-      auditEntry.error = err;
-      appendAuditLog(auditEntry);
       return res.status(400).json({ error: err });
     }
     if (typeof effectiveTarget !== "number" || isNaN(effectiveTarget)) {
       const err = "targetMonthlyPayment must be a number.";
-      auditEntry.error = err;
-      appendAuditLog(auditEntry);
       return res.status(400).json({ error: err });
     }
     if (effectiveTarget <= 0) {
       const err = "Monthly budget must be greater than 0. Based on your affordability inputs, there is no room for additional EMI.";
-      auditEntry.error = err;
-      appendAuditLog(auditEntry);
       return res.status(400).json({ error: err });
     }
 
@@ -139,7 +113,12 @@ router.post("/", async (req, res) => {
       affordabilityCeiling,
       ...(solverResult.feasible
         ? { options: solverResult.options }
-        : { reason: solverResult.reason }),
+        : {
+            reason: solverResult.reason,
+            minFeasibleEmi: solverResult.minFeasibleEmi,
+            minFeasibleTenor: solverResult.minFeasibleTenor,
+            minFeasibleLender: solverResult.minFeasibleLender,
+          }),
       explanation,
       quizResult,
       meta: {
@@ -148,17 +127,9 @@ router.post("/", async (req, res) => {
       },
     };
 
-    auditEntry.feasible = solverResult.feasible;
-    auditEntry.result = solverResult.feasible ? "feasible" : "not_feasible";
-    auditEntry.effectiveTarget = effectiveTarget;
-    auditEntry.affordabilityCeiling = affordabilityCeiling;
-    appendAuditLog(auditEntry);
-
     return res.json(responsePayload);
   } catch (err) {
     console.error("[/api/recommend] error:", err);
-    auditEntry.error = err.message || "Internal server error";
-    appendAuditLog(auditEntry);
     return res.status(500).json({ error: "Internal server error. Please try again." });
   }
 });
