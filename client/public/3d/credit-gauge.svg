@@ -1,0 +1,37 @@
+<svg width="380" height="260" viewBox="0 0 380 260" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gaugeBg" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#EF4444"/><stop offset="50%" stop-color="#F59E0B"/><stop offset="100%" stop-color="#10B981"/></linearGradient>
+    <filter id="sh"><feDropShadow dx="0" dy="8" stdDeviation="12" flood-opacity="0.12"/></filter>
+  </defs>
+  <rect width="380" height="260" rx="16" fill="white" stroke="#EDE0C8" stroke-width="1"/>
+  <!-- Gauge -->
+  <g transform="translate(190,140)">
+    <path d="M -110 0 A 110 110 0 0 1 110 0" fill="none" stroke="#F3F4F6" stroke-width="22" stroke-linecap="round"/>
+    <path d="M -110 0 A 110 110 0 0 1 110 0" fill="none" stroke="url(#gaugeBg)" stroke-width="22" stroke-linecap="round" stroke-dasharray="260 345" opacity="0.9"/>
+    <!-- Ticks -->
+    <g stroke="white" stroke-width="1.5" opacity="0.8">
+      <line x1="-90" y1="-45" x2="-85" y2="-40"/><line x1="-60" y1="-75" x2="-55" y2="-70"/><line x1="0" y1="-88" x2="0" y2="-80"/><line x1="60" y1="-75" x2="55" y2="-70"/><line x1="90" y1="-45" x2="85" y2="-40"/>
+    </g>
+    <!-- Needle -->
+    <g transform="rotate(35 0 0)">
+      <line x1="0" y1="0" x2="0" y2="-92" stroke="#1A1A2E" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="0" cy="0" r="12" fill="#1A1A2E" stroke="white" stroke-width="2"/>
+      <circle cx="0" cy="0" r="4" fill="#FFB68A"/>
+    </g>
+    <!-- Center text -->
+    <text x="0" y="30" text-anchor="middle" font-family="Fraunces, serif" font-size="28" font-weight="700" fill="#1A1A2E">3,000</text>
+    <text x="0" y="45" text-anchor="middle" font-size="10" font-weight="600" fill="#6B7280" letter-spacing="0.05em">CREDIT SCORE</text>
+  </g>
+  <!-- Labels -->
+  <g font-size="10" font-weight="600" fill="#6B7280" text-anchor="middle">
+    <text x="70" y="175">300</text><text x="310" y="175">850</text>
+  </g>
+  <!-- Factors -->
+  <g transform="translate(20,190)">
+    <text x="0" y="0" font-size="9" font-weight="700" fill="#1A1A2E" letter-spacing="0.05em">FACTORS</text>
+    <g font-size="8" fill="#6B7280">
+      <text x="0" y="14">• Great score</text><text x="0" y="24">• On-time payments</text>
+      <text x="110" y="14">• Low impact</text><text x="110" y="24">• Credit mix</text>
+    </g>
+  </g>
+</svg>

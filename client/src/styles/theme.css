@@ -439,3 +439,51 @@ h1, h2, h3 {
   .nav-tabs { overflow-x: auto; scrollbar-width: none; }
   .nav-tabs::-webkit-scrollbar { display: none; }
 }
+
+/* Motion — purposeful, not decorative */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.phone, .product-object, .compass-canvas, .spectrum-canvas { animation: fadeIn 0.4s ease-out; }
+.spectrum-dot { transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+.compass-thumb { transition: left 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+.product-object { transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s, border-color 0.25s; }
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* Focus states — accessibility */
+.btn:focus-visible, .nav-tab:focus-visible, .prompt-pill:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--peach);
+  outline-offset: 2px;
+}
+.btn:focus:not(:focus-visible), .nav-tab:focus:not(:focus-visible) { outline: none; }
+
+/* Ensure touch targets at least 44px on mobile */
+@media (max-width: 768px) {
+  .btn, .nav-tab, .prompt-pill { min-height: 44px; }
+}
+
+/* Responsive 3D hero — hide large decorative images on small screens */
+@media (max-width: 768px) {
+  .editorial-hero img { display: none !important; }
+  .dream-stage { margin: 0 12px; }
+  .product-stage { height: 160px; }
+  .spectrum-rail { margin: 32px 0 24px; }
+}
+
+/* High contrast for readability */
+@media (prefers-contrast: high) {
+  .phone, .product-object, .compass-canvas, .spectrum-canvas { border-width: 2px; border-color: var(--navy); }
+}
+
+/* No-feasible designed failure — editorial, not error */
+.no-feasible-art {
+  background: white;
+  border: 2px dashed var(--peach);
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}

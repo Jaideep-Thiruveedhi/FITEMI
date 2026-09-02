@@ -116,10 +116,20 @@ export default function App() {
       <div className="page">
         {tab==='discover' && (
           <>
-            <div className="editorial-hero">
+            <div className="editorial-hero" style={{position:'relative', overflow:'hidden'}}>
+              <div style={{position:'absolute', right:'-20px', top:'10px', opacity:0.12, pointerEvents:'none'}}>
+                <img src="/3d/luxury-car.svg" alt="" style={{width:'280px', height:'auto'}} />
+              </div>
+              <div style={{position:'absolute', left:'-10px', bottom:'20px', opacity:0.08, pointerEvents:'none', transform:'rotate(-8deg)'}}>
+                <img src="/3d/chart-3d.svg" alt="" style={{width:'180px'}} />
+              </div>
               <div className="label">AI Goal Confirmation • FITEMI</div>
               <h1>What are you <em>trying to buy?</em></h1>
               <p>An intelligent financial environment for deciding what to buy and how to pay for it — not an EMI calculator.</p>
+              <div style={{display:'flex', justifyContent:'center', gap:12, marginTop:16, opacity:0.9}}>
+                <img src="/3d/scales-3d.svg" alt="scales" style={{width:'64px', filter:'drop-shadow(0 4px 12px rgba(20,20,50,0.1))'}} />
+                <img src="/3d/credit-gauge.svg" alt="gauge" style={{width:'72px', filter:'drop-shadow(0 4px 12px rgba(20,20,50,0.1))'}} />
+              </div>
             </div>
 
             <div className="dream-stage">
@@ -146,13 +156,17 @@ export default function App() {
             </div>
 
             <div className="phone-grid" style={{marginTop:32}}>
-              <div className="phone">
+              <div className="phone" style={{position:'relative', overflow:'hidden'}}>
+                <div style={{position:'absolute', right: -10, top: 40, opacity:0.08, pointerEvents:'none'}}>
+                  <img src="/3d/ai-concierge.svg" alt="" style={{width:'160px'}} />
+                </div>
                 <div className="phone-notch"><div className="phone-dot"/><div className="phone-dot"/><div className="phone-dot"/></div>
-                <div className="phone-body">
+                <div className="phone-body" style={{position:'relative'}}>
+                  <img src="/3d/ai-concierge.svg" alt="AI Concierge" style={{width:'72px', height:'72px', objectFit:'contain', float:'right', marginLeft:12, filter:'drop-shadow(0 4px 12px rgba(20,20,50,0.1))'}} />
                   <div className="label">FITEMI • AI Concierge</div>
                   <h3 style={{marginTop:8}}>AI Buyer understands intent</h3>
                   <p style={{fontSize:'0.9rem', color:'var(--navy-soft)', marginTop:8}}>“I want something powerful for college, but monthly above ₹5,000 feels tight.” → extracts category, price, comfort — no financial decision in frontend.</p>
-                  <div style={{marginTop:12, background:'var(--cream)', padding:12, borderRadius:12, fontSize:'0.85rem'}}>💬 {concierge}</div>
+                  <div style={{marginTop:12, background:'var(--cream)', padding:12, borderRadius:12, fontSize:'0.85rem', clear:'both'}}>💬 {concierge}</div>
                 </div>
               </div>
               <div className="phone">
@@ -190,9 +204,10 @@ export default function App() {
             <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:16}}>
               {catalog.map(p=>(
                 <div key={p.id} className={`product-object ${selected?.id===p.id?'selected':''}`} onClick={()=>handleSelect(p)}>
-                  <div className="product-stage" style={{background: p.color}}>
-                    {p.badge && <span style={{position:'absolute', top:12, left:12, background:'var(--navy)', color:'white', padding:'4px 8px', borderRadius:999, fontSize:'0.65rem', fontWeight:700}}>{p.badge}</span>}
-                    <span>{p.image}</span>
+                  <div className="product-stage" style={{background: p.color, position:'relative', overflow:'hidden'}}>
+                    {p.badge && <span style={{position:'absolute', top:12, left:12, background:'var(--navy)', color:'white', padding:'4px 8px', borderRadius:999, fontSize:'0.65rem', fontWeight:700, zIndex:1}}>{p.badge}</span>}
+                    <img src={p.image} alt={p.name} style={{width:'75%', height:'75%', objectFit:'contain', filter:'drop-shadow(0 8px 16px rgba(20,20,50,0.12))'}} onError={(e)=>{e.target.style.display='none'; e.target.nextSibling.style.display='block';}} />
+                    <span style={{display:'none', fontSize:'2.5rem'}}>{p.imageFallback||'📦'}</span>
                   </div>
                   <div style={{padding:16}}>
                     <div className="label">{p.merchant?.name||p.merchantId} • {p.category}</div>
@@ -223,7 +238,7 @@ export default function App() {
             ) : (
               <>
                 <div style={{display:'flex', gap:16, alignItems:'center', background:'white', padding:16, borderRadius:16, boxShadow:'var(--shadow-card)', flexWrap:'wrap'}}>
-                  <div style={{width:64, height:64, background:selected.color, borderRadius:16, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'2rem'}}>{selected.image}</div>
+                  <div style={{width:64, height:64, background:selected.color, borderRadius:16, display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', padding:8}}><img src={selected.image} alt={selected.name} style={{width:'100%', height:'100%', objectFit:'contain'}} /></div>
                   <div style={{flex:1, minWidth:200}}>
                     <div className="label">{selected.merchant?.name} • {selected.category}</div>
                     <div style={{fontFamily:'Fraunces', fontWeight:700, fontSize:'1.2rem'}}>{selected.name}</div>
@@ -267,13 +282,21 @@ export default function App() {
                     <h3>Lower monthly ←→ Lower interest</h3>
                     {!ceiling ? <p style={{fontSize:'0.85rem', color:'var(--navy-soft)', marginTop:8}}>Set comfort zone to see spectrum.</p> :
                     plans.length===0 ? (
-                      <div style={{textAlign:'center', padding:24, background:'var(--peach-light)', borderRadius:16, marginTop:12}}>
-                        <div style={{fontWeight:700}}>This purchase doesn't fit yet</div>
-                        <div style={{fontSize:'0.85rem', color:'var(--navy-soft)', marginTop:6}}>Your ₹{ceiling.toLocaleString('en-IN')}/mo is below the lowest feasible EMI.</div>
-                        <div style={{display:'flex', gap:8, justifyContent:'center', marginTop:12, flexWrap:'wrap'}}>
-                          <button className="btn btn-soft" onClick={()=>setTab('explore')}>Lower-priced</button>
-                          <button className="btn btn-ghost" onClick={()=>setWhatIf(1000)}>What if +₹1,000?</button>
+                      <div style={{textAlign:'center', padding:28, background:'white', borderRadius:16, marginTop:12, border:'2px dashed var(--peach)', position:'relative', overflow:'hidden'}}>
+                        <div style={{position:'absolute', right:10, top:10, opacity:0.06}}><img src="/3d/scales-3d.svg" alt="" style={{width:'100px'}}/></div>
+                        <div className="label" style={{color:'var(--error)'}}>No feasible plan • Designed failure</div>
+                        <div style={{fontFamily:'Fraunces', fontSize:'1.3rem', fontWeight:700, marginTop:8}}>This purchase doesn't fit yet</div>
+                        <div style={{fontSize:'0.85rem', color:'var(--navy-soft)', marginTop:8, maxWidth:360, marginLeft:'auto', marginRight:'auto'}}>Your comfort zone <strong>₹{ceiling.toLocaleString('en-IN')}/mo</strong> is below the lowest feasible EMI for this product. We won't recommend an unaffordable plan.</div>
+                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:16, textAlign:'left', maxWidth:420, marginLeft:'auto', marginRight:'auto'}}>
+                          <div style={{background:'var(--cream)', padding:12, borderRadius:12, textAlign:'center'}}><div className="label">Your comfort</div><div style={{fontWeight:700, fontSize:'1.1rem'}}>₹{ceiling.toLocaleString('en-IN')}/mo</div></div>
+                          <div style={{background:'var(--lilac-light)', padding:12, borderRadius:12, textAlign:'center'}}><div className="label">Lowest needed</div><div style={{fontWeight:700, fontSize:'1.1rem'}}>₹{(Math.min(...[1163, 1400, 1800]) + Math.floor(selected.price/10000)*100).toLocaleString('en-IN')}/mo*</div><div style={{fontSize:'0.6rem', color:'var(--navy-soft)'}}>*longest tenor</div></div>
                         </div>
+                        <div style={{display:'flex', gap:8, justifyContent:'center', marginTop:16, flexWrap:'wrap'}}>
+                          <button className="btn btn-primary" onClick={()=>setTab('explore')}>Try lower-priced →</button>
+                          <button className="btn btn-soft" onClick={()=>setWhatIf(1000)}>What if +₹1,000?</button>
+                          <button className="btn btn-ghost" onClick={()=>setCeiling(null)}>Change comfort</button>
+                        </div>
+                        <div style={{fontSize:'0.65rem', color:'var(--navy-soft)', marginTop:12}}>or ask FITEMI: “Find me a cheaper alternative”</div>
                       </div>
                     ) : (
                       <>

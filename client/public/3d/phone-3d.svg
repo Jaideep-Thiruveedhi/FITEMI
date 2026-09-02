@@ -1,0 +1,25 @@
+<svg width="300" height="360" viewBox="0 0 300 360" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="phoneBody" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1A1A2E"/><stop offset="100%" stop-color="#2D2D44"/></linearGradient>
+    <linearGradient id="screenGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FF8A9D"/><stop offset="100%" stop-color="#8B5CF6"/></linearGradient>
+    <filter id="sh"><feDropShadow dx="0" dy="16" stdDeviation="20" flood-opacity="0.15"/></filter>
+  </defs>
+  <ellipse cx="150" cy="330" rx="60" ry="12" fill="rgba(20,20,50,0.08)"/>
+  <g filter="url(#sh)" transform="rotate(-6 150 180)">
+    <rect x="80" y="30" width="140" height="280" rx="24" fill="url(#phoneBody)" stroke="#1A1A2E" stroke-width="2"/>
+    <rect x="88" y="45" width="124" height="220" rx="12" fill="url(#screenGrad)"/>
+    <!-- Screen UI -->
+    <rect x="100" y="65" width="80" height="10" rx="5" fill="white" opacity="0.9"/>
+    <rect x="100" y="85" width="100" height="60" rx="10" fill="white" opacity="0.95"/>
+    <circle cx="115" cy="105" r="12" fill="#FFB68A"/>
+    <rect x="135" y="98" width="50" height="6" rx="3" fill="#1A1A2E" opacity="0.15"/>
+    <rect x="135" y="108" width="30" height="4" rx="2" fill="#1A1A2E" opacity="0.1"/>
+    <rect x="100" y="160" width="100" height="30" rx="8" fill="white" opacity="0.9"/>
+    <rect x="110" y="170" width="60" height="4" rx="2" fill="#FFB68A"/>
+    <!-- Notch -->
+    <rect x="120" y="30" width="60" height="14" rx="7" fill="#1A1A2E"/>
+    <!-- Buttons -->
+    <rect x="78" y="80" width="4" height="30" rx="2" fill="#2D2D44"/>
+    <rect x="78" y="120" width="4" height="30" rx="2" fill="#2D2D44"/>
+  </g>
+</svg>

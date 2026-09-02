@@ -1,0 +1,41 @@
+<svg width="380" height="320" viewBox="0 0 380 320" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="skin" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FFDAB9"/><stop offset="100%" stop-color="#E8A07A"/></linearGradient>
+    <linearGradient id="shorts" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1A1A2E"/><stop offset="100%" stop-color="#2D2D44"/></linearGradient>
+    <filter id="sh"><feDropShadow dx="0" dy="12" stdDeviation="16" flood-opacity="0.12"/></filter>
+  </defs>
+  <ellipse cx="190" cy="300" rx="50" ry="10" fill="rgba(20,20,50,0.08)"/>
+  <g filter="url(#sh)">
+    <!-- Legs -->
+    <rect x="160" y="180" width="22" height="70" rx="11" fill="url(#skin)"/>
+    <rect x="200" y="180" width="22" height="70" rx="11" fill="url(#skin)"/>
+    <!-- Shorts -->
+    <path d="M 155 160 L 225 160 L 230 195 L 150 195 Z" fill="url(#shorts)" stroke="#1A1A2E" stroke-width="1.5"/>
+    <!-- Body -->
+    <rect x="165" y="110" width="50" height="60" rx="8" fill="url(#skin)" stroke="#E8A07A" stroke-width="1"/>
+    <!-- Chest -->
+    <path d="M 170 120 Q 190 135 210 120" stroke="rgba(20,20,50,0.15)" stroke-width="1.5" fill="none"/>
+    <!-- Arms -->
+    <g>
+      <rect x="135" y="115" width="28" height="50" rx="14" fill="url(#skin)" transform="rotate(-20 149 140)"/>
+      <circle cx="125" cy="105" r="22" fill="#DC2626" stroke="#991B1B" stroke-width="2"/>
+      <text x="125" y="110" text-anchor="middle" font-size="10" font-weight="800" fill="white">🥊</text>
+    </g>
+    <g>
+      <rect x="220" y="115" width="28" height="50" rx="14" fill="url(#skin)" transform="rotate(20 234 140)"/>
+      <circle cx="258" cy="105" r="22" fill="#DC2626" stroke="#991B1B" stroke-width="2"/>
+      <text x="258" y="110" text-anchor="middle" font-size="10" font-weight="800" fill="white">🥊</text>
+    </g>
+    <!-- Head -->
+    <ellipse cx="190" cy="85" rx="32" ry="36" fill="url(#skin)" stroke="#E8A07A" stroke-width="1.5"/>
+    <!-- Hair -->
+    <path d="M 165 70 Q 190 45 215 70 Q 210 55 190 52 Q 170 55 165 70" fill="#1A1A2E"/>
+    <!-- Face -->
+    <circle cx="178" cy="85" r="3" fill="#1A1A2E"/>
+    <circle cx="202" cy="85" r="3" fill="#1A1A2E"/>
+    <path d="M 182 98 Q 190 105 198 98" stroke="#1A1A2E" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <!-- Belt -->
+    <rect x="160" y="165" width="60" height="12" rx="6" fill="#FFD700" stroke="#B8860B" stroke-width="1"/>
+    <text x="190" y="174" text-anchor="middle" font-size="7" font-weight="700" fill="#1A1A2E">CHAMP</text>
+  </g>
+</svg>

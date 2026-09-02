@@ -1,0 +1,43 @@
+<svg width="300" height="380" viewBox="0 0 300 380" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="skin2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E8D5C4"/><stop offset="100%" stop-color="#D4B8A0"/></linearGradient>
+    <linearGradient id="robe" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#F5E6D3"/><stop offset="100%" stop-color="#E8D5C4"/></linearGradient>
+    <filter id="sh"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-opacity="0.12"/></filter>
+  </defs>
+  <ellipse cx="150" cy="350" rx="55" ry="12" fill="rgba(20,20,50,0.07)"/>
+  <g filter="url(#sh)">
+    <!-- Body / Robe -->
+    <path d="M 90 180 Q 150 160 210 180 L 220 320 L 80 320 Z" fill="url(#robe)" stroke="#D4B8A0" stroke-width="1.5"/>
+    <!-- Collar -->
+    <path d="M 130 140 L 150 170 L 170 140" fill="none" stroke="#D4B8A0" stroke-width="1.5"/>
+    <!-- Head -->
+    <ellipse cx="150" cy="110" rx="42" ry="46" fill="url(#skin2)" stroke="#D4B8A0" stroke-width="1.5"/>
+    <!-- Beard -->
+    <path d="M 120 115 Q 150 175 180 115 Q 180 145 150 155 Q 120 145 120 115" fill="white" stroke="#E8D5C4" stroke-width="1"/>
+    <path d="M 125 130 Q 150 145 175 130" fill="none" stroke="#E8D5C4" stroke-width="1" opacity="0.5"/>
+    <!-- Hair -->
+    <path d="M 115 95 Q 150 60 185 95 Q 180 75 150 70 Q 120 75 115 95" fill="white" stroke="#E8D5C4" stroke-width="1"/>
+    <!-- Eyes -->
+    <circle cx="138" cy="105" r="3" fill="#1A1A2E"/>
+    <circle cx="162" cy="105" r="3" fill="#1A1A2E"/>
+    <path d="M 132 102 Q 138 98 144 102" stroke="#1A1A2E" stroke-width="1" fill="none" opacity="0.3"/>
+    <path d="M 156 102 Q 162 98 168 102" stroke="#1A1A2E" stroke-width="1" fill="none" opacity="0.3"/>
+    <!-- Glasses -->
+    <circle cx="138" cy="105" r="9" fill="none" stroke="#1A1A2E" stroke-width="1.2" opacity="0.8"/>
+    <circle cx="162" cy="105" r="9" fill="none" stroke="#1A1A2E" stroke-width="1.2" opacity="0.8"/>
+    <line x1="147" y1="105" x2="153" y2="105" stroke="#1A1A2E" stroke-width="1.2" opacity="0.8"/>
+    <!-- Smile -->
+    <path d="M 142 125 Q 150 132 158 125" stroke="#1A1A2E" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.6"/>
+    <!-- Hands -->
+    <ellipse cx="110" cy="200" rx="16" ry="20" fill="url(#skin2)" stroke="#D4B8A0" stroke-width="1"/>
+    <ellipse cx="190" cy="200" rx="16" ry="20" fill="url(#skin2)" stroke="#D4B8A0" stroke-width="1"/>
+  </g>
+  <!-- Thought bubble -->
+  <g opacity="0.9">
+    <rect x="180" y="40" width="70" height="36" rx="18" fill="white" stroke="#1A1A2E" stroke-width="1" opacity="0.95"/>
+    <text x="215" y="56" text-anchor="middle" font-size="7" font-weight="600" fill="#1A1A2E">AI Guide</text>
+    <text x="215" y="65" text-anchor="middle" font-size="6" fill="#3A3A5C">How can I help?</text>
+    <circle cx="175" cy="75" r="4" fill="white" stroke="#1A1A2E" stroke-width="1"/>
+    <circle cx="165" cy="82" r="2.5" fill="white" stroke="#1A1A2E" stroke-width="1"/>
+  </g>
+</svg>
