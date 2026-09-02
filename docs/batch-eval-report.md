@@ -1,6 +1,6 @@
 # Batch Evaluation Report
 
-Generated: 2026-09-02T05:33:54.653Z
+Generated: 2026-09-02T05:38:11.198Z
 Shoppers file: `server/data/shoppers.json`
 Lenders: lenderA (3–24mo @ 1.25%/mo), lenderB (6–18mo @ 1.08%/mo), lenderC (3–12mo @ 1.50%/mo)
 
