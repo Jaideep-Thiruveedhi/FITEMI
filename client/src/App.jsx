@@ -98,7 +98,7 @@ export default function App() {
     if(!text.trim()) return;
     setLoading(true);
     try{
-      const r=await fetch('/api/agent/orchestrate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({intentText:text, affordabilityInputs: ceiling?{takeHomePay:parseInt(afford.takeHomePay), existingObligations:parseInt(afford.existingObligations)}:null})});
+      const r=await fetch('/api/agent/orchestrate',{method:'POST',headers:{'Content-Type':'application/json','X-Agent-Id':'fitemi-web'},body:JSON.stringify({intentText:text, affordabilityInputs: ceiling?{takeHomePay:parseInt(afford.takeHomePay), existingObligations:parseInt(afford.existingObligations)}:null})});
       const j=await r.json();
       setIntent(j.intent);
       setCatalog(j.catalogResults?.map(c=>c.product)||[]);
@@ -163,8 +163,8 @@ export default function App() {
     if(!text){ setGrowthError('Enter a goal, e.g. "increase conversion for phones under ₹40,000"'); return; }
     setGrowthLoading(true); setGrowthError(null); setGrowthIntent(null); setTestRunSummary(null); setTestRunError(null);
     try{
-      // 1) Parse intent via existing agent.js parser (LLM-enhanced, deterministic fallback)
-      const pr = await fetch('/api/agent/parse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+      // 1) Parse intent via existing agent.js parser (LLM-enhanced, deterministic fallback) — include lightweight X-Agent-Id for audit
+      const pr = await fetch('/api/agent/parse',{method:'POST',headers:{'Content-Type':'application/json','X-Agent-Id':'merchant-growth-agent'},body:JSON.stringify({text})});
       const pj = await pr.json();
       if(!pr.ok) throw new Error(pj.error||'Intent parse failed');
       const intent = pj.intent;
@@ -274,8 +274,8 @@ export default function App() {
         created.push(chkJson);
         gmv += product.price;
         lastProductName = product.name;
-        // Also prove bounded guard via existing agent validation (also audited)
-        try{ await fetch('/api/agent/validate-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({productId: product.id, plan: { tenorMonths: plan.tenorMonths, emi: plan.emi, totalInterest: plan.totalInterest, totalPaid: plan.totalPaid, lenderId: plan.lenderId }, amount: product.price, userApproval:true})}); }catch{}
+        // Also prove bounded guard via existing agent validation (also audited) — include X-Agent-Id for attribution
+        try{ await fetch('/api/agent/validate-checkout',{method:'POST',headers:{'Content-Type':'application/json','X-Agent-Id':'growth-test-run'},body:JSON.stringify({productId: product.id, plan: { tenorMonths: plan.tenorMonths, emi: plan.emi, totalInterest: plan.totalInterest, totalPaid: plan.totalPaid, lenderId: plan.lenderId }, amount: product.price, userApproval:true})}); }catch{}
         if(created.length>=5) break;
       }
       if(created.length===0) throw new Error('No test orders could be created — shoppers may not fit product price within ceiling');

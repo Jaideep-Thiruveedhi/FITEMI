@@ -2,11 +2,21 @@ import express from "express";
 import { createTestOrder, verifyPayment, isRazorpayConfigured } from "../lib/razorpay.js";
 import { validateCheckout } from "../lib/agent.js";
 import { createOrder, updateOrderStatus, getOrderById } from "../lib/merchant.js";
+import { getIdempotencyKey, buildStoreKey, getCachedResponse, setCachedResponse } from "../lib/idempotency.js";
 
 const router = express.Router();
 
 // POST /api/checkout/create-order — bounded checkout, requires approval
 router.post("/create-order", async (req, res) => {
+  const idempotencyKey = getIdempotencyKey(req);
+  const storeKey = idempotencyKey ? buildStoreKey(req, idempotencyKey) : null;
+  if (storeKey) {
+    const cached = getCachedResponse(storeKey);
+    if (cached) {
+      return res.status(cached.status).json(cached.body);
+    }
+  }
+
   const { productId, plan, amount, buyer, userApproval } = req.body;
   if (!userApproval) return res.status(403).json({ error: "User approval required — bounded gate" });
   if (!productId || !plan || !amount) return res.status(400).json({ error: "productId, plan, amount required" });
@@ -41,7 +51,7 @@ router.post("/create-order", async (req, res) => {
       updateOrderStatus(order.id, "awaiting_payment", { razorpayOrderId: razorpayOrder.id });
     }
 
-    res.json({
+    const responseBody = {
       success: true,
       orderId: order.id,
       merchantOrder: order,
@@ -51,7 +61,9 @@ router.post("/create-order", async (req, res) => {
       message: razorpayOrder.isSimulated
         ? "Test-mode simulated order — no real charge. Configure RAZORPAY_KEY_ID/SECRET for live test-mode."
         : "Razorpay test-mode order created. Use test card 4111 1111 1111 1111 to complete.",
-    });
+    };
+    if (storeKey) setCachedResponse(storeKey, 200, responseBody);
+    res.json(responseBody);
   } catch (e) {
     console.error("[checkout/create-order]", e);
     res.status(400).json({ error: e.message });

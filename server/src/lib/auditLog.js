@@ -150,9 +150,11 @@ export function auditMiddleware(req, res, next) {
 
   res.on("finish", () => {
     const durationMs = Date.now() - start;
+    const agentId = req.headers["x-agent-id"] || req.headers["x-agentId"] || req.agentId || null;
     const entry = {
       timestamp: new Date().toISOString(),
       requestId,
+      ...(agentId ? { agentId: String(agentId) } : {}),
       method: req.method,
       path: req.originalUrl || req.url,
       status: res.statusCode,

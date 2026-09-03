@@ -16,17 +16,17 @@ Content-Type: `application/json` for all POST bodies. All numbers are INR unless
 
 ## Auth Model
 
-- **Current (demo):** No auth. The server trusts any caller on localhost. This is intentional for evaluation and local demos.
-- **What would change for production / protocol-native integration:** Add signed agent identity (e.g. `Authorization: Bearer <agent-token>` or `X-Agent-Signature`), merchant-scoped keys, and per-agent rate limiting. Checkout already gates on `userApproval:true` — under a protocol like ACP/AP2/x402 this would be replaced by a signed payment authorization token (see `ARCHITECTURE.md` > Agent-to-Agent Commerce Protocols).
+- **Current (demo):** Lightweight agent-identity header — `X-Agent-Id` is **required** on all `/api/agent/*` routes. It is logged alongside `requestId` in every audit entry (`server/src/lib/auditLog.js`, `server/src/routes/agent.js` middleware) for attribution. **This is NOT cryptographic auth** — it is *identity attribution for audit purposes* only; anyone can set the header. **Production would require signed agent credentials (e.g. mTLS or OAuth client credentials)** — noted as a known limitation, not implemented here. `GET /api/catalog`, `POST /api/recommend`, `POST /api/checkout/*`, and `GET /api/audit` remain open for local demo. Checkout already gates on `userApproval:true` — under a protocol like ACP/AP2/x402 this would be replaced by a signed payment authorization token (see `ARCHITECTURE.md` > Agent-to-Agent Commerce Protocols).
+- **What would change for production / protocol-native integration:** Replace `X-Agent-Id` with signed agent identity (e.g. `Authorization: Bearer <agent-token>` or `X-Agent-Signature`, mTLS client cert, OAuth client credentials), merchant-scoped keys, and per-agent rate limiting. Verify signature server-side and bind `agentId` to the verified identity before logging.
 
 ---
 
 ## Idempotency / requestId Behavior
 
-- Every request is assigned `requestId = req_<epoch>_<rand>` by `auditMiddleware` (`server/src/lib/auditLog.js:64`).
-- `requestId`, `method`, `path`, `status`, `durationMs`, plus minimal business fields (`feasible`, `minFeasibleEmi`, etc.) are appended as a JSON line to `server/data/audit.log` (hash-chained; see `GET /api/audit/verify`).
-- **Current:** No explicit idempotency key. Retrying `POST /api/checkout/create-order` with the same body creates a *new* merchant order (new `orderId`). The audit log is append-only; replay is visible via `requestId` timeline.
-- **Production extension path:** Accept `Idempotency-Key` header on `create-order`; store `<key, orderId>` and return the same `orderId` on replay. Bind `requestId` to protocol-native intent ID (e.g. x402 payment payload hash). See `ARCHITECTURE.md`.
+- Every request is assigned `requestId = req_<epoch>_<rand>` by `auditMiddleware` (`server/src/lib/auditLog.js:64`). For `/api/agent/*`, the lightweight `X-Agent-Id` header (see Auth Model) is also read and stored as `agentId` alongside `requestId` in the same audit entry — both are hash-chained (`GET /api/audit/verify` recomputes `SHA-256(JSON(entry)+prevHash)`).
+- `requestId` (+ `agentId` when present), `method`, `path`, `status`, `durationMs`, plus minimal business fields (`feasible`, `minFeasibleEmi`, etc.) are appended as a JSON line to `server/data/audit.log` (hash-chained; see `GET /api/audit/verify`).
+- **Current:** Idempotency is implemented for `POST /api/checkout/create-order` and `POST /api/agent/draft-order` via optional `Idempotency-Key` header (or reuse of `X-Request-Id` / `Request-Id` if already flowing). If a request with the same key arrives again on the same route, the original `200` response (same `orderId`/`razorpayOrder.id`) is returned instead of creating a duplicate Razorpay order. Mappings are held in-memory (`server/src/lib/idempotency.js`) with a 24h TTL; no DB. Retrying without a key still creates a new order (visible via distinct `requestId`s). See `server/src/lib/idempotency.js` and `server/src/routes/checkout.js` / `server/src/routes/agent.js`.
+- **Production extension path:** Persist `Idempotency-Key → orderId` in durable store (SQLite/Redis) and bind `requestId`/`agentId` to protocol-native intent ID (e.g. x402 payment payload hash). See `ARCHITECTURE.md`.
 
 ---
 

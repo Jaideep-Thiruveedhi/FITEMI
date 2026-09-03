@@ -17,6 +17,9 @@
  */
 
 const BASE_URL = process.env.FITEMI_API_URL || `http://localhost:${process.env.PORT || 4000}`;
+// Lightweight agent identity for audit — NOT cryptographic auth (see API_SCHEMA.md Auth Model)
+// Production would require mTLS/OAuth client credentials; here we just attribute the demo agent in the audit log.
+const AGENT_ID = process.env.AGENT_ID || "agent-buyer-demo";
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -54,9 +57,14 @@ async function postJson(path, body) {
   const url = `${BASE_URL}${path}`;
   console.log(`[EXTERNAL AGENT] -> FITEMI API POST ${path}`);
   console.log(`[EXTERNAL AGENT]    sent: ${JSON.stringify(body).slice(0, 500)}`);
+  const headers = { "Content-Type": "application/json" };
+  // Include lightweight agent identity for audit (required on /api/agent/*, see server/src/routes/agent.js)
+  if (path.startsWith("/api/agent/")) {
+    headers["X-Agent-Id"] = AGENT_ID;
+  }
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(body),
   });
   const text = await res.text();
