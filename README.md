@@ -85,32 +85,39 @@ Works on macOS/Linux/Windows (`copy .env.example .env` on Windows).
 
 ---
 
-## 60-Second Demo (The One Perfect Flow)
+## Demo — One Coherent Story: From Abandoned Checkouts to Measured Recovery
 
-**Merchant:** TechHaven sells **ThinkPad X1 Carbon — ₹65,000**
+> **Scope:** This demo is a *controlled synthetic simulation* (same `npm run batch-eval` shopper generator, not live merchant data) that proves the **AI Growth Loop** mechanism end-to-end — prediction → merchant approval → AI buyer → test payment → measured outcome → audit. No pricing or inventory is changed; all orders are Razorpay test-mode.
 
-**AI Buyer says:**
-> “I need a laptop for ₹60,000. My user can comfortably pay about ₹5,000/month.”
+**1. Merchant reports abandoned checkouts** — open **Merchant** tab → **Growth Agent** goal input (same `X-Agent-Id: merchant-growth-agent` header as the AI buyer). Type a natural-language goal:
+> `Increase conversion for laptops under ₹70,000`
+→ `POST /api/agent/parse` (`X-Agent-Id: merchant-growth-agent`, reuse `intentParser.js`) extracts `{category:laptop, maxPrice:77000}` → `POST /api/merchant/growth-analysis` runs the three distinct stages on **60 synthetic shoppers** (same 4-bucket generator, same `0.4× takeHome−obligations` ceiling, same `emiSolver`/`lenders`):
+- `detectFriction` → `46.7% of declines (7/15) had EMI > affordability by <₹1k/month — within one affordability step of feasible`
+- `identifyOpportunity` → `7 near-miss customers` in `laptop ₹42,000–₹65,000` (the `₹1k` threshold segment)
+- `simulateIntervention` → `before 63.3% (38/60, ₹19,42,356 GMV) → after 63.3% (38/60, ₹19,42,356 GMV)` vs fixed `6/12/24` baseline — with full `pattern`/`breakdown`/`medianGap` numbers, all in `Fragment Mono`, labeled `CONTROLLED SIMULATION • SYNTHETIC`.
 
-**FITEMI:**
+The panel reveals these stages sequentially (`Analyzing → Opportunity found → Simulation → Recommendation`) with a `420ms` stagger, not all at once, so it reads as reasoning. The **Preview** card then shows the recommendation — `Enable affordability-matched EMI for laptop under ₹65,000` — with the `₹{avgEmi}/mo` fit, headroom variant, and the 5 deterministic reasoning bullets (`ceiling = max(0, floor(0.4×takeHome−obligations))`, `EMI = P·r·(1+r)^n/((1+r)^n−1)` via `emiSolver.js`, 3 lenders, `6/12/24` vs `3-24`, 60-shopper cohort) — **before** any action.
 
-1. **Dream** — type the sentence → `POST /api/agent/orchestrate` parses intent (`category:laptop`, `maxPrice:66000`, `targetMonthly:5000`)
-2. **Discover** — `GET /api/catalog?q=laptop` → filters, shows **ThinkPad X1** + **MacBook Air** with merchant, price, availability
-3. **Affordability** — `POST /api/recommend` with `takeHomePay:40000, existingObligations:12000` → backend computes `ceiling:4000` → **Compass** shows `COMFORTABLE ₹4,000/mo`
-4. **EMI Spectrum** — `LOWER MONTHLY ←→ LOWER INTEREST` with 3 plans from solver (e.g., `5mo @ ₹4,981` ★ YOUR FIT, `6mo @ ₹4,152`, `6mo @ ₹4,212`), interactive
-5. **Trade-off Lab** — switch `Balanced`/`Lower monthly`/`Lower interest`/`Fastest` → re-ranks deterministically, explains `“Choosing lower monthly extends tenure by 1mo, +₹8 interest”`
-6. **What-if** — click `Budget +₹1,000` → `CURRENT ₹4,000 → NEW ₹5,000 → NEW OPTIONS` via real `POST /api/recommend`
-7. **Deep Plan** — select ★ YOUR FIT → shows `EMI/tenor/interest/total` + `principal vs interest` bar + `Why this plan?` bullets + alternatives
-8. **Bounded Checkout** — `YOU ARE ABOUT TO PURCHASE` with `Approve payment` gate (agent `REQUIRES_APPROVAL`)
-9. **Razorpay Test-Mode** — `POST /api/checkout/create-order` with `userApproval:true` → real `orders.create` if keys set, else **simulated** `order_sim_…` with clear message `“Simulated — no real charge”` — never claims real payment if simulated
-10. **Merchant** — `GET /api/merchant/orders` → `NEW AI BUYER — ThinkPad X1 — Agent selected: ₹4,981/mo — PAID (test-mode)` + revenue insights
-11. **Audit** — `GET /api/audit` → timeline `Intent → Product → Affordability → Plan → Approval → Payment → Confirmed` with `requestId`/`durationMs`
+**2. Merchant approves the bounded proof** — in the Preview card, click **`Run in Test Mode`** → an inline confirmation gate appears (same bounded pattern as buyer `YOU ARE ABOUT TO PURCHASE`): `Bounded proof — no pricing/inventory change — Calls POST /api/merchant/growth-execute (which internally uses existing POST /api/recommend + POST /api/checkout/create-order with userApproval:true) for 3–5 synthetic shoppers. Creates real Razorpay test-mode orders (order_sim_… if keys not set).` Click **`Confirm — Run 3–5 test orders`** (requires explicit approval; `Cancel` aborts). The request carries `Idempotency-Key` (24h in-memory, same store as checkout/draft-order) so a retry returns the same orders.
 
-**Second Demo — Unknown Budget:**
-> “I want this laptop but I don't know what EMI I can afford.” → FITEMI asks 3 questions (take-home → obligations → other) → `POST /api/recommend` with `takeHomePay/existingObligations` → ceiling → spectrum → checkout (same as above).
+**3. Separately, an AI buyer arrives** — in a second terminal (or as the Growth Agent's 3–5 shoppers):
+> `I need a laptop for ₹60,000. My user can comfortably pay about ₹5,000/month.`
+→ `POST /api/agent/orchestrate` (`X-Agent-Id: fitemi-web`, `X-Agent-Id: agent-buyer-demo` for the external demo) parses intent (`laptop`, `maxPrice:66000`, `targetMonthly:5000`) → `GET /api/catalog?q=laptop` → **Affordability Compass** (`POST /api/recommend` with `takeHomePay:40000, existingObligations:12000` → backend `ceiling:4000`) → **EMI Spectrum** (`LOWER MONTHLY ↔ LOWER INTEREST` with 3 solver plans, e.g. `9mo @ ₹4,922` ★ YOUR FIT) → **Bounded Checkout** `YOU ARE ABOUT TO PURCHASE` → **Approve** (`userApproval:true` → `POST /api/agent/validate-checkout` → `POST /api/checkout/create-order`).
 
-**Third Demo — Failure (Graceful):**
-> `POST {itemPrice:24000, targetMonthlyPayment:500}` → `feasible:false` → UI shows `No feasible plan — Your budget ₹500/mo — Lowest feasible EMI ₹1,163/mo (24mo lenderA) — Try: increase budget / lower-priced product / longer tenure — Ask FITEMI for alternatives` + audit `feasible:false`.
+**4. Razorpay test payment succeeds** — `POST /api/checkout/create-order` creates a merchant order (`awaiting_approval` → `paid` if simulated, `awaiting_payment` if real `rzp_test_…` keys) and a Razorpay test order (`order_sim_…` `isSimulated:true` or real `order_…` `isSimulated:false`, `isTestMode:true`). No real money moves without `rzp_test_` keys.
+
+**5. Merchant dashboard shows the recovered sale with measured outcome** — the `Measured outcome` card (appearing only after `growth-execute` returns) compares **predicted** (`simulateIntervention`: `recoveredCheckoutCount`, `estimatedGmvRecovered` for the full 60-shopper cohort) vs **measured** (`growth-execute`: `transactionCount`, `gmv` for the 3–5 shopper bounded proof, e.g. `5 test transactions completed, ₹3,25,000 test GMV, all logged to audit trail.`) with the same `Fragment Mono` scale and `--radius-card` containers. The orders also appear in `GET /api/merchant/orders` (`NEW AI BUYER — ThinkPad X1 — PAID (test-mode)`) and the `3–5` order pills (`orderId.slice(0,14) · ₹{amount}`).
+
+**6. Audit trail verifies every step** — `GET /api/audit` shows the sequential timeline `Intent (X-Agent-Id) → Product → Affordability (ceiling) → Plan (EMI/tenor/interest) → Approval (userApproval:true) → Payment (Razorpay test) → Confirmed` with `requestId`, `agentId` (for all `/api/agent/*`), `durationMs`, `feasible`, and the SHA-256 hash chain (`GET /api/audit/verify` → `{"intact":true}`; `hash_n = SHA256(JSON(entry_n)+hash_{n-1})`). Every Growth Agent and test-mode request goes through `auditMiddleware` — no new unaudited code path, and the hash chain is untouched (clean addition).
+
+Run it:
+```bash
+npm run dev
+# Merchant: Merchant tab → type "Increase conversion for laptops under ₹70,000" → Analyze → Preview → Run in Test Mode → Confirm → see Measured outcome
+# Buyer: Dream → "I want a laptop around ₹60,000 at ₹5,000/month" → Explore → My Fit → Approve → Orders
+# Or headless: npm run demo:agent -- --query "laptop around 60000" --budget 5000  # sends X-Agent-Id: agent-buyer-demo
+# Verify: curl http://localhost:4000/api/audit/verify; curl http://localhost:4000/api/merchant/orders
+```
 
 ---
 

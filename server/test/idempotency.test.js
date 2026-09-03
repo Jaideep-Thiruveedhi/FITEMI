@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import checkoutRouter from "../src/routes/checkout.js";
 import agentRouter from "../src/routes/agent.js";
+import merchantRouter from "../src/routes/merchant.js";
 import { findFeasiblePlans } from "../src/lib/emiSolver.js";
 import { lenders } from "../src/lib/lenders.js";
 import { getProductById } from "../src/lib/catalog.js";
@@ -19,6 +20,7 @@ describe("idempotency — POST /api/checkout/create-order and POST /api/agent/dr
     app.use(express.json());
     app.use("/api/checkout", checkoutRouter);
     app.use("/api/agent", agentRouter);
+    app.use("/api/merchant", merchantRouter);
     await new Promise((resolve) => {
       server = app.listen(0, () => {
         const addr = server.address();
@@ -99,5 +101,53 @@ describe("idempotency — POST /api/checkout/create-order and POST /api/agent/dr
     const body3 = await res3.json();
     assert.equal(res3.status, 200);
     assert.notEqual(body3.orderId, firstOrderId, "different Idempotency-Key should create new order");
+  });
+
+  it("duplicate draft-order with same Idempotency-Key and X-Agent-Id returns same order ID", async () => {
+    _clearStore();
+    const product = getProductById("p7");
+    const target = 5000;
+    const result = findFeasiblePlans(product.price, target, lenders);
+    assert.ok(result.feasible);
+    const plan = result.options[0];
+    const payload = {
+      productId: product.id,
+      plan: { tenorMonths: plan.tenorMonths, emi: plan.emi, totalInterest: plan.totalInterest, totalPaid: plan.totalPaid, lenderId: plan.lenderId },
+      amount: product.price,
+      buyer: {},
+    };
+    const key = `draft-test-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const headers = { "Content-Type": "application/json", "Idempotency-Key": key, "X-Agent-Id": "test-agent" };
+    const r1 = await fetch(`${baseUrl}/api/agent/draft-order`, { method: "POST", headers, body: JSON.stringify(payload) });
+    const b1 = await r1.json();
+    assert.equal(r1.status, 200);
+    assert.ok(b1.orderId);
+    const r2 = await fetch(`${baseUrl}/api/agent/draft-order`, { method: "POST", headers, body: JSON.stringify(payload) });
+    const b2 = await r2.json();
+    assert.equal(b2.orderId, b1.orderId, "duplicate draft-order should return same orderId");
+  });
+
+  it("duplicate growth-execute with same Idempotency-Key returns same measured orders", async () => {
+    _clearStore();
+    const key = `growth-exec-test-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const body = { category: "laptop", priceMin: 40000, priceMax: 70000 };
+    const r1 = await fetch(`${baseUrl}/api/merchant/growth-execute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+      body: JSON.stringify(body),
+    });
+    const b1 = await r1.json();
+    assert.equal(r1.status, 200);
+    assert.ok(b1.measured);
+    assert.ok(Array.isArray(b1.measured.orders));
+    const firstIds = b1.measured.orders.map(o => o.orderId).join(",");
+    const r2 = await fetch(`${baseUrl}/api/merchant/growth-execute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+      body: JSON.stringify(body),
+    });
+    const b2 = await r2.json();
+    assert.equal(b2.measured.orders.map(o => o.orderId).join(","), firstIds, "duplicate growth-execute should return same orderIds");
+    assert.equal(b2.predicted.recoveredCheckoutCount, b1.predicted.recoveredCheckoutCount);
   });
 });

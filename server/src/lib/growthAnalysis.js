@@ -413,6 +413,191 @@ export function analyzeAffordabilityGapPattern(results) {
 }
 
 // ---------------------------------------------------------------------------
+// STAGE 1: Distinct named stages — not one black-box call
+// Each stage returns real computed numbers from the same synthetic data
+// ---------------------------------------------------------------------------
+
+/**
+ * Stage 1a: detectFriction(category, priceRange)
+ * Generates N synthetic shoppers for the given category + price range (reusing
+ * batch-eval generator) and finds the affordability-gap pattern among declines.
+ * @param {object} opts
+ * @param {string|null} opts.category
+ * @param {object|null} opts.priceRange - { min, max } or { priceMin, priceMax } or priceBand
+ * @param {object|null} opts.priceBand - alias for priceRange
+ * @param {number|null} opts.priceMin - alias
+ * @param {number|null} opts.priceMax - alias
+ * @param {number} opts.shopperCount
+ * @returns {object} friction result with real computed pattern, breakdown, gaps, plus shoppers/results for next stages
+ */
+export function detectFriction({ category = null, priceRange = null, priceBand = null, priceMin = null, priceMax = null, shopperCount = 60 } = {}) {
+  // Normalize priceRange / priceBand / priceMin/priceMax into a single priceBand object
+  let effectiveBand = priceBand || priceRange || null;
+  if (priceMin != null || priceMax != null) {
+    effectiveBand = { min: priceMin ?? null, max: priceMax ?? null };
+    if (effectiveBand.min == null && effectiveBand.max == null) effectiveBand = priceBand || priceRange || null;
+  }
+  // Allow priceRange as { priceMin, priceMax } form
+  if (effectiveBand && (effectiveBand.priceMin != null || effectiveBand.priceMax != null)) {
+    effectiveBand = { min: effectiveBand.priceMin ?? effectiveBand.min ?? null, max: effectiveBand.priceMax ?? effectiveBand.max ?? null };
+  }
+
+  const N = Math.max(1, Math.min(500, Math.floor(Number(shopperCount) || 60)));
+  const { min: priceMinEff, max: priceMaxEff, products: matchedProducts } = deriveEffectivePriceRange({ category, priceBand: effectiveBand });
+  const shoppers = generateSimulationShoppers({ priceMin: priceMinEff, priceMax: priceMaxEff, count: N });
+
+  // Run baseline vs FITEMI for each shopper to get per-shopper results (deterministic, no random beyond generation)
+  const results = [];
+  for (const shopper of shoppers) {
+    const { target } = resolveTargetForShopper(shopper);
+    if (target == null || target <= 0) {
+      results.push({
+        shopperId: shopper.id, bucket: shopper.bucket, itemPrice: shopper.itemPrice, target, source: shopper.statedBudget != null ? "statedBudget" : "affordabilityCeiling",
+        baseline: { feasible: false, reason: "target <= 0" }, fitemi: { feasible: false, reason: "target <= 0", minFeasibleEmi: null }, recoveredByFitemi: false,
+      });
+      continue;
+    }
+    const baseline = checkBaselineFeasible(shopper.itemPrice, target);
+    const fitemi = checkFitemiFeasible(shopper.itemPrice, target);
+    results.push({
+      shopperId: shopper.id, bucket: shopper.bucket, itemPrice: shopper.itemPrice, target,
+      baseline: { feasible: baseline.feasible, tenor: baseline.bestTenor, emi: baseline.bestEmi, lenderId: baseline.lenderId, minFeasibleEmi: baseline.minFeasibleEmi },
+      fitemi: { feasible: fitemi.feasible, tenor: fitemi.bestOption?.tenorMonths || null, emi: fitemi.bestOption?.emi || null, minFeasibleEmi: fitemi.minFeasibleEmi || fitemi.raw?.minFeasibleEmi || null },
+      recoveredByFitemi: !baseline.feasible && fitemi.feasible,
+    });
+  }
+
+  const affordabilityGap = analyzeAffordabilityGapPattern(results);
+  const declines = results.filter(r => !r.fitemi.feasible && r.target > 0);
+  const totalShoppers = shoppers.length;
+
+  return {
+    stage: "detectFriction",
+    category: category || "all",
+    priceRange: { min: priceMinEff, max: priceMaxEff },
+    priceBand: { min: priceMinEff, max: priceMaxEff },
+    requestedPriceBand: normalizePriceBand(effectiveBand),
+    matchedProducts: matchedProducts.map(p => ({ id: p.id, name: p.name, category: p.category, price: p.price })),
+    matchedProductsCount: matchedProducts.length,
+    totalShoppers,
+    // Real computed friction pattern
+    pattern: affordabilityGap.pattern,
+    affordabilityGap,
+    declinesCount: declines.length,
+    gaps: affordabilityGap.gaps,
+    breakdown: affordabilityGap.breakdown,
+    medianGap: affordabilityGap.medianGap,
+    // Pass through for next stages (same synthetic data, no re-randomization)
+    shoppers,
+    results,
+    effectiveBand: { min: priceMinEff, max: priceMaxEff },
+  };
+}
+
+/**
+ * Stage 1b: identifyOpportunity(friction)
+ * Takes friction result and returns the affected customer count and price band.
+ * @param {object} friction - result from detectFriction
+ * @returns {object} opportunity with real computed affected counts
+ */
+export function identifyOpportunity(friction) {
+  if (!friction || !friction.affordabilityGap) throw new Error("identifyOpportunity requires friction result from detectFriction");
+  const ag = friction.affordabilityGap;
+  // Affected customers are those within the chosen threshold (near-miss declines)
+  const affectedCustomerCount = ag.count ?? 0;
+  const affectedPct = ag.pct ?? 0;
+  const priceBand = friction.priceBand || friction.priceRange || friction.effectiveBand;
+  return {
+    stage: "identifyOpportunity",
+    category: friction.category,
+    priceBand,
+    priceRange: priceBand,
+    matchedProducts: friction.matchedProducts,
+    matchedProductsCount: friction.matchedProductsCount,
+    totalShoppers: friction.totalShoppers,
+    declinesCount: friction.declinesCount,
+    // Real opportunity numbers
+    affectedCustomerCount,
+    affectedPct,
+    threshold: ag.threshold,
+    thresholdLabel: ag.thresholdLabel,
+    breakdown: ag.breakdown,
+    // Human-readable opportunity description
+    description: `${affectedCustomerCount} of ${ag.declinesCount} declines (${affectedPct}%) are within <${ag.thresholdLabel || "₹2k"}/month of affordability in ${friction.category} ${priceBand.min.toLocaleString("en-IN")}–${priceBand.max.toLocaleString("en-IN")} — the near-miss segment FITEMI can recover without lowering price.`,
+    // Pass through for next stage (same synthetic data, no re-randomization)
+    _friction: friction,
+    shoppers: friction.shoppers,
+    results: friction.results,
+  };
+}
+
+/**
+ * Stage 1c: simulateIntervention(opportunity)
+ * Takes opportunity (which contains friction/shoppers/results) and simulates
+ * before/after conversion with FITEMI's affordability-matched solver.
+ * @param {object} opportunity - result from identifyOpportunity (must include friction's shoppers/results or be friction itself for backward compat)
+ * @param {object} opts - optionally pass { friction } if opportunity does not contain shoppers
+ * @returns {object} intervention with real before/after numbers
+ */
+export function simulateIntervention(opportunity, opts = {}) {
+  // Allow calling as simulateIntervention(friction) or simulateIntervention(opportunity, { friction })
+  // Resolve shoppers/results/priceBand from whichever object contains them
+  const friction = opts.friction || opportunity?._friction || opportunity?.friction || opportunity;
+  // If opportunity was produced by identifyOpportunity, it may not have shoppers; fall back to friction
+  const shoppers = opportunity.shoppers || friction.shoppers || opts.shoppers;
+  const results = opportunity.results || friction.results || opts.results;
+  const priceBand = opportunity.priceBand || friction.priceBand || friction.priceRange || opportunity.priceRange;
+
+  if (!shoppers || !results) {
+    throw new Error("simulateIntervention requires shoppers/results — pass friction from detectFriction or opportunity that carries them");
+  }
+
+  let baselineFeasible = 0;
+  let fitemiFeasible = 0;
+  let baselineGmv = 0;
+  let fitemiGmv = 0;
+  for (const r of results) {
+    if (r.baseline?.feasible) { baselineFeasible++; baselineGmv += r.itemPrice; }
+    if (r.fitemi?.feasible) { fitemiFeasible++; fitemiGmv += r.itemPrice; }
+  }
+  const total = results.length;
+  const baselineConversion = total ? Number(((baselineFeasible / total) * 100).toFixed(1)) : 0;
+  const fitemiConversion = total ? Number(((fitemiFeasible / total) * 100).toFixed(1)) : 0;
+  const recoveredCheckoutCount = fitemiFeasible - baselineFeasible;
+  const estimatedGmvRecovered = Math.round(fitemiGmv - baselineGmv);
+  const feasibilityLift = Number((fitemiConversion - baselineConversion).toFixed(1));
+  const recoveredPct = baselineFeasible ? Number(((recoveredCheckoutCount / baselineFeasible) * 100).toFixed(1)) : (recoveredCheckoutCount ? 100 : 0);
+
+  return {
+    stage: "simulateIntervention",
+    category: opportunity.category || friction.category,
+    priceBand: priceBand || friction.priceBand,
+    priceRange: priceBand || friction.priceRange,
+    totalShoppers: total,
+    before: {
+      conversion: baselineConversion,
+      feasibleCount: baselineFeasible,
+      infeasibleCount: total - baselineFeasible,
+      totalGmv: Math.round(baselineGmv),
+    },
+    after: {
+      conversion: fitemiConversion,
+      feasibleCount: fitemiFeasible,
+      infeasibleCount: total - fitemiFeasible,
+      totalGmv: Math.round(fitemiGmv),
+    },
+    // Required fields for Stage 1 spec
+    recoveredCheckoutCount,
+    estimatedGmvRecovered,
+    gmvRecovered: estimatedGmvRecovered,
+    gmvRecoveredFormatted: `₹${estimatedGmvRecovered.toLocaleString("en-IN")}`,
+    recoveredCheckoutsPct: recoveredPct,
+    feasibilityLift,
+    description: `FITEMI recovers ${recoveredCheckoutCount} checkouts (+${recoveredPct}%) and ₹${estimatedGmvRecovered.toLocaleString("en-IN")} GMV vs fixed 6/12/24mo baseline in this synthetic ${total}-shopper simulation.`,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Main simulation: run N synthetic shoppers, compute delta
 // ---------------------------------------------------------------------------
 
@@ -660,6 +845,9 @@ export default {
   FITEMI_DESCRIPTION,
   BASELINE_TENORS,
   runGrowthSimulation,
+  detectFriction,
+  identifyOpportunity,
+  simulateIntervention,
   generateSimulationShoppers,
   checkBaselineFeasible,
   checkFitemiFeasible,
