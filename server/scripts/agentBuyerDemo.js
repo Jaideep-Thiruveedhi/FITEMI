@@ -16,10 +16,16 @@
  *   Budget is interpreted as targetMonthlyPayment (₹/mo).
  */
 
+import crypto from "crypto";
+
 const BASE_URL = process.env.FITEMI_API_URL || `http://localhost:${process.env.PORT || 4000}`;
 // Lightweight agent identity for audit — NOT cryptographic auth (see API_SCHEMA.md Auth Model)
 // Production would require mTLS/OAuth client credentials; here we just attribute the demo agent in the audit log.
+// When AGENT_SHARED_SECRET is set, we also send HMAC signature (see server/src/lib/agentAuth.js) —
+// this is still a shared-secret demo (production would use per-agent keys), but it proves
+// the caller holds the secret and the request wasn't replayed (5m window, timingSafeEqual).
 const AGENT_ID = process.env.AGENT_ID || "agent-buyer-demo";
+const AGENT_SHARED_SECRET = process.env.AGENT_SHARED_SECRET || null;
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -61,6 +67,15 @@ async function postJson(path, body) {
   // Include lightweight agent identity for audit (required on /api/agent/*, see server/src/routes/agent.js)
   if (path.startsWith("/api/agent/")) {
     headers["X-Agent-Id"] = AGENT_ID;
+    if (AGENT_SHARED_SECRET) {
+      const timestamp = Date.now().toString();
+      const bodyString = body ? JSON.stringify(body) : "";
+      const canonical = `POST\n${path}\n${AGENT_ID}\n${bodyString}\n${timestamp}`;
+      const hmac = crypto.createHmac("sha256", AGENT_SHARED_SECRET).update(canonical, "utf8").digest("hex");
+      headers["X-Agent-Timestamp"] = timestamp;
+      headers["X-Agent-Signature"] = hmac;
+      console.log(`[EXTERNAL AGENT]    signed: X-Agent-Timestamp=${timestamp} X-Agent-Signature=${hmac.slice(0, 16)}...`);
+    }
   }
   const res = await fetch(url, {
     method: "POST",

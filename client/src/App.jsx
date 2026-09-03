@@ -1,51 +1,4 @@
-/*
- * FITEMI — DESIGN PLAN (pass 1, awaiting approval before implementation)
- * Palette already set (theme.css: parched parchment #F9F1E7, cream #FFFBF5, peach #FFB68A, lilac #D8CFFF, mint #CFF5E7, navy #141432, line rgba). No palette changes.
- *
- * Subject grounding: This is a financial instrument for installment payments — receipts, ledgers, comfort zones — not a generic AI chat. Every visual decision must map to that subject.
- *
- * TYPOGRAPHY
- * - Display: Fraunces 700/800 for hero / section headings only. No italic gradient accent on "trying to buy?" — rewrite hero H1 as plain ledger headline: "What are you trying to buy?" in solid navy, no <em> gradient (theme.css:.editorial-hero h1 em currently overrides).
- * - Body/UI: Instrument Sans 400/500/600 for labels, prompts, descriptions.
- * - Numbers: Fragment Mono for ALL currency, tenor, IDs, requestIds, tenorMonths/emi. Audit every render: product.price, originalPrice, ceiling (/mo), plan.emi, plan.totalInterest, plan.totalPaid, plan.totalInterest deltas, checkout amounts, orders[].amount, orders[].plan.emi, merchantOrder.amount, razorpayOrder.amountInRupees, orderId/razorpayOrderId/requestId, audit requestId slices. Add class="mono-price" or inline fontFamily:'Fragment Mono' where missing (currently some prices use Fraunces or default). Ensure theme.css .price/.mono-price covers these.
- *
- * HIERARCHY / LAYOUT
- * - Single editorial column, max-width 1280 page grid. Hero is ledger cover, not marketing splash: title + one-line explainer ("An intelligent financial environment for deciding what to buy and how to pay for it") + live mini payment-spectrum preview (see REPLACEMENTS). No full-bleed 3D images overlapping hero.
- * - Dream composer stays as "ledger entry line": rupee glyph + input + prompt-pills + Find my fit. Below it, intent summary uses a 3-column receipt strip (What I heard / Price range / Comfort) — keep grid but render values in mono where currency.
- * - Catalog: product-object cards remain structural containers (see RADIUS). Inside: product-stage (color field) + meta block. Merchant label is real information — keep as single label "TechHaven" not "TechHaven • laptop".
- * - My Fit: two-column grid (Comfort Zone | EMI Spectrum) → Trade-off Lab + What-if → Plan Explorer → plan cards. Keep same DOM order, just declutter decorative chrome.
- * - Orders / Merchant: receipt cards, not phone chrome with dot overflow. Keep phone-grid but reduce phone-notch decoration or keep minimal.
- *
- * REMOVALS (audit counts as specified)
- * - ✦ sparkle icon: currently not visible in App.jsx lines 1-584 (likely was in hero H1 "✦ trying to buy?") — if present, remove entirely. Do not replace with another emoji; replace with ledger hook (below).
- * - 9 trailing → arrows: audit every " →" in App.jsx — e.g., "Browse catalog →" (line ~163), "Continue to checkout →" (~396), "What if" arrow "→" (~356), insights "→ {action}" (~532), plus any other button/pill trailing arrows. Strategy: remove all decorative trailing arrows from button labels. Where arrow indicated action progression (e.g., "Try lower-priced →"), rewrite as verb without arrow ("Try lower-priced") or replace with ledger-grounded affordance (e.g., "View alternatives" button). Purely decorative → stripped; navigation-progression → replaced by explicit verb or layout proximity, not glyph.
- * - 32 " • " dot-joined labels: audit every template "A • B" — catalog label "{merchant} • {category}", order line "₹{emi}/mo • {merchantName}", plan header "{lenderId} • {tenor}mo", etc. For each: if decorative join (e.g., "FITEMI • AI Concierge", "Merchant • Agent-readable", "Bounded • Gated • Audited", "AI Concierge • ..."), cut or split into two stacked lines with label roles. If informational (e.g., "TechHaven • laptop"), keep both pieces but render as two separate elements stacked or with a rule-line divider, not a dot join: e.g., <div class="label">TechHaven</div><div class="meta">laptop</div> or merchant chip + category chip with mono. Same for "₹4992/mo • FutureWorks" → line break or two-column. Goal: each dot join is either removed or carries real information without " • ".
- * - Italic gradient accent on "trying to buy?": currently theme.css:.editorial-hero h1 em has background/italic/gradient bleed — remove rule entirely, keep H1 plain navy Fraunces. No <em> styling needed.
- *
- * REPLACEMENTS — grounded in payment/ledger subject
- * - Hero visual hook: replace luxury-car.svg / chart-3d.svg absolute images + scales/gauge centered row + styled headline word with a LIVE MINI PAYMENT-SPECTRUM PREVIEW. For a reference principal (e.g., ₹60,000 at ₹5,000/mo), compute or hard-code 3 solver points (e.g., 9mo @ ₹6,890, 12mo @ ₹5,300, 18mo @ ₹3,650) rendered as a thin horizontal rule with 3 mono dots and labels "9mo — 18mo" + caption "Lower monthly ↔ Lower total interest — preview for ₹60,000 at ₹5,000/mo". This previews the actual instrument, not decoration. Uses same .spectrum-rail/.spectrum-dot but at 60% opacity, non-interactive, with mono labels. No 3D SVGs in hero; keep them only if repurposed as faint ledger watermarks (optional, not hero).
- * - Sparkle's old job (delight/attention): replaced by that spectrum preview + rupee glyph in input. Arrows' old job (affordance): replaced by primary button fill + proximity; dot joins' old job (grouping): replaced by stacked label/value pairs and mono alignment (ledger columns).
- * - Additional ledger grounding: where we had decorative dividers, use thin rule lines (border-top: 1px solid var(--line)) and receipt-like grouping. Comfort Zone thumb stays as ledger marker; spectrum dots remain but gain mono price captions.
- *
- * MONO AUDIT (every render)
- * - Pass: product.price, originalPrice (strikethrough), ceiling, plan.emi, plan.totalInterest, plan.totalPaid, plan.totalInterest deltas, whatIf delta, checkout plan.emi/totalPaid, order amount, order plan.emi, merchantOrder.amount, razorpayOrder.amountInRupees, orderId, razorpayOrderId, requestId slices, intent.maxPrice, intent.targetMonthly — all must have fontFamily:'Fragment Mono' or class price/mono-price. Currently ~8 spots use Fraunces or default; will fix to mono.
- * - Also: convert remaining "₹{n}/mo" strings to mono spans; keep "/" as regular for legibility but number in mono.
- *
- * BORDER-RADIUS — deliberate variance
- * - Pill (border-radius:999px) ONLY for true toggles/badges/tabs: .nav-tabs container, .nav-tab, .prompt-pill, .spectrum-badge, badge chips, tenure toggle buttons, SELECTED pill, nav-wordmark span. Not for cards.
- * - Structural containers: single --radius-card (20px) for .dream-stage, .product-object, .compass-canvas, .spectrum-canvas, .phone, plan cards, checkout receipt, merchant console cards, audit containers, .no-feasible-art. Audit every inline borderRadius:12/16/24/28 and normalize to var(--radius-card) unless element qualifies as pill.
- * - Keep --radius-phone (28px) only if phone chrome remains; otherwise deprecate. Buttons keep 999px (pill) as they are toggles.
- *
- * IMPLEMENTATION ORDER (after approval)
- * 1) Remove sparkle/→/dot-joins/italic gradient per audit list (provide line-by-line checklist in commit).
- * 2) Add hero mini-spectrum preview + strip 3D absolute images from hero.
- * 3) Mono audit pass across all price/ID renders.
- * 4) Radius normalization pass (pill vs card).
- * 5) Visual QA: verify no regressions for App.jsx: theme still loads, no broken imports.
- *
- * Awaiting user confirm before touching code beyond this comment.
- */
-
+﻿// FITEMI — Main App component — AI-native payment-fit commerce agent (single coherent product, 5 tabs: Discover / Explore / My Fit / Orders / Merchant)
 /*
  * STAGE 3 — GROWTH AGENT PANEL — DESIGN PLAN (written before implementation, do not implement yet)
  * Location: Merchant tab (`tab==='merchant'`) in App.jsx, as a single additive panel sitting above the existing
@@ -192,6 +145,7 @@ export default function App() {
     setLoading(true);
     try{
       const r=await fetch('/api/agent/orchestrate',{method:'POST',headers:{'Content-Type':'application/json','X-Agent-Id':'fitemi-web'},body:JSON.stringify({intentText:text, affordabilityInputs: ceiling?{takeHomePay:parseInt(afford.takeHomePay), existingObligations:parseInt(afford.existingObligations)}:null})});
+      if(!r.ok){ const ej=await r.json().catch(()=>({})); throw new Error(ej.error||`Server error ${r.status}`); }
       const j=await r.json();
       setIntent(j.intent);
       setCatalog(j.catalogResults?.map(c=>c.product)||[]);
@@ -199,7 +153,10 @@ export default function App() {
       setTab('explore');
       const best=j.catalogResults?.find(c=>c.isBestFit)?.product;
       if(best) handleSelect(best, j.affordabilityCeiling);
-    }catch{ setConcierge("Try: 'laptop around ₹60,000'"); }
+    }catch(e){
+      const msg = e.message && (e.message.toLowerCase().includes('failed to fetch') || e.message.toLowerCase().includes('fetch failed')) ? "Couldn't reach the server — is the backend running on port 4000?" : (e.message || "Try: 'laptop around ₹60,000'");
+      setConcierge(msg);
+    }
     setLoading(false);
   };
 
@@ -215,16 +172,23 @@ export default function App() {
     const p=prod||selected; const t=target||ceiling;
     if(!p||!t) return;
     setLoading(true);
-    const eff=Math.max(500, t + whatIf);
-    const r=await fetch('/api/recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemPrice:p.price, targetMonthlyPayment: eff})});
-    const j=await r.json();
-    if(j.feasible){
-      let opts=j.options;
-      if(trade==='low-payment') opts=[...opts].sort((a,b)=>a.emi-b.emi);
-      else if(trade==='low-interest') opts=[...opts].sort((a,b)=>a.totalInterest-b.totalInterest);
-      else if(trade==='fast') opts=[...opts].sort((a,b)=>a.tenorMonths-b.tenorMonths);
-      setPlans(opts); setActivePlan(0);
-    } else setPlans([]);
+    try{
+      const eff=Math.max(500, t + whatIf);
+      const r=await fetch('/api/recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemPrice:p.price, targetMonthlyPayment: eff})});
+      if(!r.ok){ const ej=await r.json().catch(()=>({})); throw new Error(ej.error||`Server error ${r.status}`); }
+      const j=await r.json();
+      if(j.feasible){
+        let opts=j.options;
+        if(trade==='low-payment') opts=[...opts].sort((a,b)=>a.emi-b.emi);
+        else if(trade==='low-interest') opts=[...opts].sort((a,b)=>a.totalInterest-b.totalInterest);
+        else if(trade==='fast') opts=[...opts].sort((a,b)=>a.tenorMonths-b.tenorMonths);
+        setPlans(opts); setActivePlan(0);
+      } else setPlans([]);
+    }catch(e){
+      const msg = e.message && (e.message.toLowerCase().includes('failed to fetch') || e.message.toLowerCase().includes('fetch failed')) ? "Couldn't reach the server — is the backend running on port 4000?" : (e.message || "Failed to load plans");
+      setConcierge(msg);
+      setPlans([]);
+    }
     setLoading(false);
   };
   useEffect(()=>{ if(selected&&ceiling) fetchPlans(); },[trade, whatIf, ceiling]);
@@ -232,9 +196,16 @@ export default function App() {
   const handleAfford = async ()=>{
     const th=parseInt(afford.takeHomePay); const ob=parseInt(afford.existingObligations);
     if(!th){ setConcierge("Enter take-home pay."); return; }
-    const r=await fetch('/api/recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemPrice:selected?.price||60000, takeHomePay:th, existingObligations:ob, otherExpenses:parseInt(afford.otherExpenses)||0})});
-    const j=await r.json();
-    if(j.affordabilityCeiling!=null){ setCeiling(j.affordabilityCeiling); setConcierge(`Comfort zone ₹${j.affordabilityCeiling.toLocaleString('en-IN')}/mo (0.4× take-home − obligations, backend).`); if(selected) fetchPlans(selected, j.affordabilityCeiling); }
+    try{
+      const r=await fetch('/api/recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemPrice:selected?.price||60000, takeHomePay:th, existingObligations:ob, otherExpenses:parseInt(afford.otherExpenses)||0})});
+      if(!r.ok){ const ej=await r.json().catch(()=>({})); throw new Error(ej.error||`Server error ${r.status}`); }
+      const j=await r.json();
+      if(j.affordabilityCeiling!=null){ setCeiling(j.affordabilityCeiling); setConcierge(`Comfort zone ₹${j.affordabilityCeiling.toLocaleString('en-IN')}/mo (0.4× take-home − obligations, backend).`); if(selected) fetchPlans(selected, j.affordabilityCeiling); }
+      else if(j.error){ setConcierge(j.error); }
+    }catch(e){
+      const msg = e.message && (e.message.toLowerCase().includes('failed to fetch') || e.message.toLowerCase().includes('fetch failed')) ? "Couldn't reach the server — is the backend running on port 4000?" : (e.message || "Failed to calculate comfort zone");
+      setConcierge(msg);
+    }
   };
 
   const handleCheckout = async ()=>{
@@ -243,10 +214,14 @@ export default function App() {
     setLoading(true);
     try{
       const r=await fetch('/api/checkout/create-order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({productId:selected.id, plan:{tenorMonths:plan.tenorMonths, emi:plan.emi, totalInterest:plan.totalInterest, totalPaid:plan.totalPaid, lenderId:plan.lenderId}, amount:selected.price, buyer:{targetMonthlyPayment:ceiling, affordabilityCeiling:ceiling}, userApproval:true})});
+      if(!r.ok){ const ej=await r.json().catch(()=>({})); throw new Error(ej.error||`Server error ${r.status}`); }
       const j=await r.json();
       if(j.success){ setCheckout(j); setConcierge(j.isSimulated?'Simulated test order — no real charge.':'Razorpay test order created.'); loadOrders(); loadAudit(); }
-      else setConcierge(j.error);
-    }catch{ setConcierge("Checkout failed."); }
+      else setConcierge(j.error || "Checkout failed");
+    }catch(e){
+      const msg = e.message && (e.message.toLowerCase().includes('failed to fetch') || e.message.toLowerCase().includes('fetch failed')) ? "Couldn't reach the server — is the backend running on port 4000?" : (e.message || "Checkout failed");
+      setConcierge(msg);
+    }
     setLoading(false);
   };
 
@@ -294,7 +269,8 @@ export default function App() {
       if(!gr.ok) throw new Error(gj.error||'Growth analysis failed');
       setGrowthResult(gj);
     }catch(e){
-      setGrowthError(e.message||'Growth Agent failed');
+      const msg = e.message && (e.message.toLowerCase().includes('failed to fetch') || e.message.toLowerCase().includes('fetch failed')) ? "Couldn't reach the server — is the backend running on port 4000?" : (e.message || 'Growth Agent failed');
+      setGrowthError(msg);
       setGrowthResult(null);
     }
     setGrowthLoading(false);
@@ -320,11 +296,14 @@ export default function App() {
       const priceMax = band?.max ?? null;
       const idempotencyKey = `growth-exec-${cat}-${priceMin}-${priceMax}-${Date.now()}`;
       const er = await fetch('/api/merchant/growth-execute',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey},body:JSON.stringify({ category: cat==='all'?null:cat, priceMin, priceMax })});
+      if(!er.ok){ const ej=await er.json().catch(()=>({})); throw new Error(ej.error||`Server error ${er.status}`); }
       const ej = await er.json();
-      if(!er.ok) throw new Error(ej.error || 'Growth execute failed');
       setGrowthExecuteResult(ej);
       loadOrders(); loadAudit(); loadAuditVerify();
-    }catch(e){ setGrowthExecuteError(e.message||'Execute failed'); }
+    }catch(e){
+      const msg = e.message && (e.message.toLowerCase().includes('failed to fetch') || e.message.toLowerCase().includes('fetch failed')) ? "Couldn't reach the server — is the backend running on port 4000?" : (e.message || 'Execute failed');
+      setGrowthExecuteError(msg);
+    }
     setGrowthExecuteLoading(false);
   };
 
@@ -346,9 +325,15 @@ export default function App() {
       }
       if(candidateProducts.length===0) candidateProducts = catalog;
       if(candidateProducts.length===0){
-        const cr = await fetch('/api/catalog?q=');
-        const cj = await cr.json();
-        candidateProducts = cj.products||[];
+        try{
+          const cr = await fetch('/api/catalog?q=');
+          if(!cr.ok){ const ej=await cr.json().catch(()=>({})); throw new Error(ej.error||`Server error ${cr.status}`); }
+          const cj = await cr.json();
+          candidateProducts = cj.products||[];
+        }catch(e){
+          const msg = e.message && (e.message.toLowerCase().includes('failed to fetch') || e.message.toLowerCase().includes('fetch failed')) ? "Couldn't reach the server — is the backend running on port 4000?" : (e.message || "Failed to load catalog");
+          throw new Error(msg);
+        }
       }
       if(candidateProducts.length===0) throw new Error('No catalog product available for test run');
       const created = [];
@@ -394,7 +379,8 @@ export default function App() {
       });
       loadOrders(); loadAudit(); loadAuditVerify();
     }catch(e){
-      setTestRunError(e.message||'Test run failed');
+      const msg = e.message && (e.message.toLowerCase().includes('failed to fetch') || e.message.toLowerCase().includes('fetch failed')) ? "Couldn't reach the server — is the backend running on port 4000?" : (e.message || 'Test run failed');
+      setTestRunError(msg);
     }
     setTestRunLoading(false);
   };
