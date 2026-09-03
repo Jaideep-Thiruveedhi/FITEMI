@@ -2,6 +2,12 @@
 
 **Track 01: AI Growth & Agentic Commerce — Razorpay**
 
+## For Evaluators
+
+- **External agent (end-to-end):** `npm run dev` in one terminal, then `npm run demo:agent -- --query "laptop around 60000" --budget 5000` — watch `[EXTERNAL AGENT] -> FITEMI API` logs for orchestrate → recommend → checkout.
+- **Audit integrity:** `curl http://localhost:4000/api/audit/verify` → `{"intact":true}`; also shown as `Audit integrity: verified ✓` in Merchant → Audit Timeline.
+- **Tests:** `npm test` (emiSolver unit tests) and `npm run eval:check` (feasible rate ≥50%, avg tenor ≤24mo).
+
 > *FITEMI turns affordability into an agentic commerce decision.*
 
 A buyer doesn't ask “What EMI options do you have?”  
@@ -291,4 +297,24 @@ FITEMI/
 │   ├── src/{App.jsx,styles/theme.css,components/*}
 │   └── vite.config.js (proxy /api → :4000)
 └── docs/batch-eval-report.md
+```
+
+---
+
+## Files Changed (this iteration)
+
+- `server/scripts/agentBuyerDemo.js` — new external agent demo (orchestrate → recommend → checkout)
+- `server/docs/API_SCHEMA.md` — new agent-callable API spec (orchestrate/recommend/create-order)
+- `ARCHITECTURE.md` — added "Agent-to-Agent Commerce Protocols" section
+- `server/src/lib/llmAdvisor.js` — 8s timeout + [LLM_FALLBACK] logging, robust deterministic fallback
+- `server/src/lib/auditLog.js` — hash-chain (SHA-256) per entry + verifyAuditLog()
+- `server/src/index.js` — added GET /api/audit/verify
+- `client/src/App.jsx` — audit integrity indicator + verify fetch in Merchant Audit Timeline
+- `server/src/lib/emiSolver.js` — zero-rate handling (P/n)
+- `server/test/emiSolver.test.js` — new unit tests (node:test)
+- `server/scripts/evalCheck.js` — new regression guard (feasible ≥50%, avg tenor ≤24mo)
+- `server/package.json` — added scripts demo:agent, test, eval:check
+- `package.json` — added scripts demo:agent, test, eval:check
+- `README.md` — added For Evaluators + this file list
+- `client/src/styles/theme.css` + `client/src/App.jsx` visual cleanup from prior iteration (sparkle, dot-joins, arrows, hero em, rule-line, mono prices, radius)
 ```

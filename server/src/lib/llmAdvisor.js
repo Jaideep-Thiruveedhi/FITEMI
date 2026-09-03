@@ -13,6 +13,9 @@ async function callClaude(prompt, systemPrompt) {
     return null; // signal fallback
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -27,19 +30,30 @@ async function callClaude(prompt, systemPrompt) {
         system: systemPrompt,
         messages: [{ role: "user", content: prompt }],
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     if (!res.ok) {
       const errBody = await res.text();
       console.warn(`[llmAdvisor] Claude API error ${res.status}: ${errBody}`);
+      console.warn(`[LLM_FALLBACK] Anthropic API non-2xx (${res.status}) — using deterministic explanation`);
       return null;
     }
 
     const data = await res.json();
     const text = data.content?.[0]?.text;
-    return text || null;
+    if (!text) {
+      console.warn(`[LLM_FALLBACK] Claude returned empty content — using deterministic explanation`);
+      return null;
+    }
+    return text;
   } catch (err) {
-    console.warn("[llmAdvisor] Claude API call failed:", err.message);
+    clearTimeout(timeout);
+    const reason = err.name === "AbortError" ? "timeout (8s)" : err.message;
+    console.warn("[llmAdvisor] Claude API call failed:", reason);
+    console.warn(`[LLM_FALLBACK] Claude call failed (${reason}) — using deterministic explanation`);
     return null;
   }
 }
@@ -116,6 +130,8 @@ export async function explainRecommendation(solverResult, inputs) {
 
   const llmText = await callClaude(prompt, systemPrompt);
   if (llmText) return llmText.trim();
+  // Explicit testable fallback path — deterministic explanation, visible in demo
+  console.log(`[LLM_FALLBACK] explainRecommendation fallback for itemPrice=${inputs.itemPrice} feasible=${solverResult.feasible}`);
   return fallbackExplanation(solverResult, inputs);
 }
 
@@ -175,6 +191,9 @@ export async function askAffordabilityQuestions(conversationSoFar) {
     `Just return the single question, nothing else.`;
 
   const llmQuestion = await callClaude(prompt, systemPrompt);
+  if (!llmQuestion) {
+    console.log(`[LLM_FALLBACK] askAffordabilityQuestions fallback for ${nextField}`);
+  }
   return {
     isComplete: false,
     collected,

@@ -13,7 +13,10 @@
     "start": "npm start --workspace=server",
     "batch-eval": "npm run batch-eval --workspace=server",
     "verify": "node scripts/verify-demo.js",
-    "generate-shoppers": "npm run generate-shoppers --workspace=server"
+    "generate-shoppers": "npm run generate-shoppers --workspace=server",
+    "demo:agent": "node server/scripts/agentBuyerDemo.js",
+    "test": "npm run test --workspace=server",
+    "eval:check": "npm run eval:check --workspace=server"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

@@ -1,7 +1,9 @@
 /**
  * EMI = P × r × (1+r)^n / ((1+r)^n − 1)
+ * Handles zero-rate edge case (r=0 => EMI = P/n).
  */
 export function emiForTenor(principal, monthlyRate, n) {
+  if (monthlyRate === 0) return principal / n;
   const factor = Math.pow(1 + monthlyRate, n);
   return principal * monthlyRate * factor / (factor - 1);
 }

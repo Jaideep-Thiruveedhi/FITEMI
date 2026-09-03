@@ -8,7 +8,7 @@ import catalogRouter from "./routes/catalog.js";
 import agentRouter from "./routes/agent.js";
 import checkoutRouter from "./routes/checkout.js";
 import merchantRouter from "./routes/merchant.js";
-import { readAuditLog, auditMiddleware } from "./lib/auditLog.js";
+import { readAuditLog, verifyAuditLog, auditMiddleware } from "./lib/auditLog.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,6 +48,15 @@ app.get("/api/audit", (req, res) => {
     res.json({ count: entries.length, entries });
   } catch (err) {
     res.status(500).json({ error: "Failed to read audit log." });
+  }
+});
+
+app.get("/api/audit/verify", (req, res) => {
+  try {
+    const result = verifyAuditLog();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to verify audit log.", details: err.message });
   }
 });
 

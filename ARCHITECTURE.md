@@ -98,3 +98,36 @@ User: "laptop around ₹60,000 at ₹5,000/mo"
 ```
 
 All synthetic data under `server/data` + `server/src/lib/catalog.js`; no DB, no real bank calls.
+
+## Agent-to-Agent Commerce Protocols
+
+FITEMI's core is an **agentic-commerce API** that any external AI buyer can call over HTTP (see `server/docs/API_SCHEMA.md` and `server/scripts/agentBuyerDemo.js`). The bounded/gated/audited model is deliberately designed to sit *underneath* emerging agent payment protocols rather than compete with them.
+
+### How today maps to ACP / AP2 / x402 (conceptual)
+
+| Protocol concept | FITEMI today | What changes to support the protocol natively |
+|---|---|---|
+| **Agent identity & intent** (ACP: buyer agent, AP2: `IntentMandate`, x402: payer address) | `POST /api/agent/orchestrate` parses `intentText` free-form; trust is by caller on localhost, no signature. `agent.js: ALLOWED / DISALLOWED` lists what an agent may do; `auditMiddleware` attaches `requestId`. | Replace free-form trust with **signed agent identity**: verify `X-Agent-Signature` / AP2 `IntentMandate` JWT, bind `requestId` to protocol intent ID, and enforce ACL per agent. |
+| **Payment authorization** (ACP: checkout, AP2: `CartMandate`/`PaymentMandate`, x402: `402 Payment Required` + `X-PAYMENT`) | `POST /api/checkout/create-order` requires `userApproval:true` (boolean). `validateCheckout` (`server/src/lib/agent.js:98`) checks product/price/plan deterministically and throws `CHARGE_WITHOUT_APPROVAL`. The UI gate is the only authorization. | Replace the `boolean` gate with a **protocol-native authorization token**: ACP signed checkout payload, AP2 dual mandates, or x402 `Payment` header. Validate the signature, amount, merchant, and mandate scope server-side; keep `validateCheckout` as the final deterministic check. |
+| **Audit / non-repudiation** (ACP mandate receipt, AP2 signed transcript, x402 payment proof) | `auditLog.js` appends every request to `server/data/audit.log` as JSON line with `timestamp, requestId, method, path, status, durationMs, feasible`. `GET /api/audit/verify` recomputes a SHA-256 hash chain (`hash_n = SHA256(JSON(entry_n) + hash_{n-1})`) and returns `intact:true/false`. Frontend shows `Audit integrity: verified ✓` in Merchant > Audit Timeline. | Anchor the hash chain to a per-protocol transcript: e.g. sign each audit entry with the agent's mandate ID, or include the x402 payment hash in the entry. Optionally publish chain tip to an external transparency log. |
+| **Discovery** (ACP product listing, x402 resource price header) | `GET /api/catalog` and `GET /api/catalog/agent/readable` provide an agent-readable catalog (`productId, merchant, price, supportedTenors`). No `Price` header is emitted. | Expose `402` + `X-Payment` / `Price` headers or ACP discovery payloads; keep the existing catalog as fallback. |
+
+### Current limitations (honest)
+
+- **No signed identity.** The demo agent is trusted by localhost; any caller can call the API. Production would need agent authentication and merchant scoping.
+- **`userApproval:true` is not a mandate.** It is a demo gate, not an AP2 `PaymentMandate` or x402 USDC transfer. Replacing it requires adding signature verification and replay protection.
+- **No idempotency key on checkout.** Retrying `create-order` creates a new `orderId`; the audit log makes this visible via distinct `requestId`s. A real protocol integration would add `Idempotency-Key` (or bind to the mandate hash) and return the same order on retry.
+- **No protocol libraries are vendored.** ACP, AP2, and x402 are referenced at a conceptual level only; FITEMI does not ship their SDKs or implement their wire formats today.
+
+### Extension path
+
+1. Add middleware to verify `Authorization` / `X-Agent-Signature` (or `X-PAYMENT`) before `agent.js` logic.
+2. Extend `POST /api/checkout/create-order` to accept *either* `userApproval:true` (compat) *or* `paymentAuthorization: { protocol: "ap2"|"x402"|"acp", token: "…" }`; verify token deterministically before `validateCheckout`.
+3. Include `protocol`, `mandateId`/`paymentHash`, and agent signature in `audit.log` entries so `GET /api/audit/verify` can attest to the full flow end-to-end.
+
+The standalone demo `npm run demo:agent` already proves the layering: it is an *external* process that calls FITEMI's HTTP API like any ACP/AP2/x402 agent would — the only difference is the authorization artifact it sends.
+
+References (conceptual — not implemented):
+- ACP: https://www.agenticcommerce.dev/
+- AP2 (Google): https://developers.google.com/ap2
+- x402 (Coinbase): https://www.x402.org/
