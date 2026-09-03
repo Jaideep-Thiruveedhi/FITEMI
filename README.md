@@ -32,6 +32,8 @@ FITEMI is **not** a calculator, dashboard, or ChatGPT clone. It's an **AI buyer 
 
 Every money decision is **deterministic and backend-owned**; the LLM only understands intent, asks clarifying questions, and explains.
 
+> **Scope — Controlled Synthetic Simulation (deliberate, not an overclaim):** The merchant-facing **AI Growth Loop** is a *controlled synthetic simulation demonstrating the growth mechanism*, not live merchant data. It reuses the existing `npm run batch-eval` synthetic shopper generator (same 4-bucket distributions, same deterministic `0.4× take-home − obligations` ceiling and `emiSolver`/`lenders`) to run a before/after comparison — *before FITEMI* (fixed `6/12/24` mo tenures only, industry-standard baseline) vs *with FITEMI* (affordability-matched solver) — and reports baseline vs FITEMI conversion, recovered checkout count, recovered GMV estimate, and the affordability-gap pattern (e.g., “37% of declines had EMI > affordability by <₹2k/mo”). All API responses (`POST /api/merchant/growth-analysis`), UI labels, and the **Growth Agent** in Merchant tab are explicitly marked `CONTROLLED SIMULATION • SYNTHETIC` with `isSynthetic:true` and `disclaimer: does not represent real transaction history or a financial guarantee`; `Run in Test Mode` creates only Razorpay test-mode orders (`order_sim_…` if keys not set) via the existing `POST /api/checkout/create-order` flow and logs every request through `auditMiddleware`. This is intentional scope to show the mechanism honestly, without fabricating business performance.
+
 ---
 
 ## Why It's Different

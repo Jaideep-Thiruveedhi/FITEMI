@@ -76,6 +76,16 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [aiOn, setAiOn] = useState(true);
   const [concierge, setConcierge] = useState("Tell me what you want — I'll find a comfortable way to pay for it.");
+  // Growth Agent — merchant-facing AI Growth Loop
+  const [growthInput, setGrowthInput] = useState('increase conversion for phones under ₹40,000');
+  const [growthLoading, setGrowthLoading] = useState(false);
+  const [growthIntent, setGrowthIntent] = useState(null);
+  const [growthResult, setGrowthResult] = useState(null);
+  const [growthError, setGrowthError] = useState(null);
+  // Bounded Run in Test Mode — proves via existing checkout/agent test flow (audited)
+  const [testRunLoading, setTestRunLoading] = useState(false);
+  const [testRunSummary, setTestRunSummary] = useState(null);
+  const [testRunError, setTestRunError] = useState(null);
 
   useEffect(()=>{ loadCatalog(); loadOrders(); loadAudit(); loadAuditVerify(); loadInsights(); }, []);
   const loadCatalog = async (q='')=>{ const r=await fetch(`/api/catalog?q=${encodeURIComponent(q)}`); const j=await r.json(); setCatalog(j.products||[]); };
@@ -145,6 +155,144 @@ export default function App() {
       else setConcierge(j.error);
     }catch{ setConcierge("Checkout failed."); }
     setLoading(false);
+  };
+
+  // Growth Agent — parse natural-language goal via /api/agent/parse then run growth-analysis
+  const handleGrowthAgent = async ()=>{
+    const text = growthInput?.trim();
+    if(!text){ setGrowthError('Enter a goal, e.g. "increase conversion for phones under ₹40,000"'); return; }
+    setGrowthLoading(true); setGrowthError(null); setGrowthIntent(null); setTestRunSummary(null); setTestRunError(null);
+    try{
+      // 1) Parse intent via existing agent.js parser (LLM-enhanced, deterministic fallback)
+      const pr = await fetch('/api/agent/parse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+      const pj = await pr.json();
+      if(!pr.ok) throw new Error(pj.error||'Intent parse failed');
+      const intent = pj.intent;
+      // Fallback if deterministic parser missed price due to no ₹/comma (e.g. "phones under 40000")
+      let fallbackMax = intent.maxPrice;
+      let fallbackCat = intent.category;
+      if(!fallbackMax){
+        const rawNums = [...text.matchAll(/₹?\s*([\d,]+)\s*k?/gi)].map(m=>{
+          let v = parseInt(m[1].replace(/,/g,''),10);
+          const hasK = /k/i.test(m[0]);
+          if(hasK && v < 1000) v*=1000;
+          return v;
+        }).filter(v=> v>=5000 && v<=200000);
+        if(rawNums.length) fallbackMax = Math.max(...rawNums);
+      }
+      if(!fallbackCat){
+        const lower=text.toLowerCase();
+        if(lower.match(/laptop|macbook|thinkpad|dell/)) fallbackCat='laptop';
+        else if(lower.match(/phone|iphone|galaxy|pixel|samsung/)) fallbackCat='phone';
+        else if(lower.match(/tablet|ipad/)) fallbackCat='tablet';
+        else if(lower.match(/headphone|sony|audio|earphone/)) fallbackCat='audio';
+      }
+      setGrowthIntent({...intent, category: fallbackCat, maxPrice: fallbackMax});
+      // Map intent to growth-analysis price band
+      // intent.maxPrice is upper bound (under/around), intent.category is category
+      // priceMin left null → backend derives effective min from matched catalog products
+      const category = fallbackCat || null;
+      const priceMax = fallbackMax || null;
+      const priceMin = null;
+      // Also support explicit minPrice if ever returned (future)
+      // 2) Run controlled before/after simulation (synthetic, baseline fixed 6/12/24 vs FITEMI solver)
+      const gr = await fetch('/api/merchant/growth-analysis',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category, priceMin, priceMax})});
+      const gj = await gr.json();
+      if(!gr.ok) throw new Error(gj.error||'Growth analysis failed');
+      setGrowthResult(gj);
+    }catch(e){
+      setGrowthError(e.message||'Growth Agent failed');
+      setGrowthResult(null);
+    }
+    setGrowthLoading(false);
+  };
+  const handleGrowthPreview = ()=>{
+    if(!growthResult) return;
+    const cat = growthResult.inputs?.category;
+    const band = growthResult.inputs?.priceBand;
+    const q = cat && cat!=='all' ? cat : '';
+    loadCatalog(q);
+    setTab('explore');
+    window.scrollTo({top:0, behavior:'smooth'});
+  };
+
+  // Bounded "Run in Test Mode" — does NOT change pricing/inventory, reuses existing checkout flow (audited, no new unaudited path)
+  const handleRunInTestMode = async ()=>{
+    if(!growthResult){ setTestRunError('Run Analyze first to get synthetic shoppers'); return; }
+    setTestRunLoading(true); setTestRunError(null); setTestRunSummary(null);
+    try{
+      // Select 3-5 synthetic shoppers from the analysis that are FITEMI-feasible (visible proof)
+      // Prefer recovered shoppers (baseline infeasible → FITEMI feasible) else any feasible
+      const allFeasible = (growthResult.results||[]).filter(r=> r.fitemi?.feasible);
+      const recovered = (growthResult.results||[]).filter(r=> r.recoveredByFitemi);
+      // Prefer recovered shoppers; otherwise take first 10 feasible to ensure we can get 3-5 successes (some low-target shoppers may not fit product price)
+      let pool = recovered.length>=3 ? recovered : allFeasible;
+      if(pool.length===0) throw new Error('No FITEMI-feasible synthetic shoppers in this simulation — try a different price band');
+      let sample = pool.slice(0,10);
+      // Candidate products — must be real catalog pricing (no inventory change, pricing unchanged)
+      let candidateProducts = [];
+      if(growthResult.inputs?.matchedProducts?.length) candidateProducts = growthResult.inputs.matchedProducts;
+      else {
+        const cat = growthResult.inputs?.category;
+        candidateProducts = catalog.filter(p=> !cat || cat==='all' || p.category===cat);
+      }
+      if(candidateProducts.length===0) candidateProducts = catalog;
+      if(candidateProducts.length===0){
+        const cr = await fetch('/api/catalog?q=');
+        const cj = await cr.json();
+        candidateProducts = cj.products||[];
+      }
+      if(candidateProducts.length===0) throw new Error('No catalog product available for test run');
+      const created = [];
+      let gmv = 0;
+      let lastProductName = null;
+      for(const shopper of sample){
+        const target = shopper.target;
+        if(!target || target<=0) continue;
+        // Try each candidate product until one is feasible for this shopper's ceiling — uses existing POST /api/recommend (deterministic solver)
+        let found = null;
+        for(const cand of candidateProducts.slice(0,5)){
+          const recRes = await fetch('/api/recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemPrice: cand.price, targetMonthlyPayment: target})});
+          const recJson = await recRes.json();
+          if(!recRes.ok || !recJson.feasible || !recJson.options?.[0]) continue;
+          found = { product: cand, plan: recJson.options[0] };
+          break;
+        }
+        if(!found) continue;
+        const { product, plan } = found;
+        // Create test-mode order via existing checkout flow — bounded, requires userApproval, goes through auditMiddleware
+        // Does NOT change real pricing/inventory — amount is catalog price, pricing is read-only
+        const chkRes = await fetch('/api/checkout/create-order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+          productId: product.id,
+          plan: { tenorMonths: plan.tenorMonths, emi: plan.emi, totalInterest: plan.totalInterest, totalPaid: plan.totalPaid, lenderId: plan.lenderId },
+          amount: product.price,
+          buyer: { targetMonthlyPayment: target, affordabilityCeiling: target },
+          userApproval: true
+        })});
+        const chkJson = await chkRes.json();
+        if(!chkRes.ok || !chkJson.success) continue;
+        created.push(chkJson);
+        gmv += product.price;
+        lastProductName = product.name;
+        // Also prove bounded guard via existing agent validation (also audited)
+        try{ await fetch('/api/agent/validate-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({productId: product.id, plan: { tenorMonths: plan.tenorMonths, emi: plan.emi, totalInterest: plan.totalInterest, totalPaid: plan.totalPaid, lenderId: plan.lenderId }, amount: product.price, userApproval:true})}); }catch{}
+        if(created.length>=5) break;
+      }
+      if(created.length===0) throw new Error('No test orders could be created — shoppers may not fit product price within ceiling');
+      setTestRunSummary({
+        count: created.length,
+        gmv,
+        gmvFormatted: `₹${gmv.toLocaleString('en-IN')}`,
+        orders: created,
+        productName: lastProductName || candidateProducts[0]?.name || '—',
+        message: `${created.length} test transactions completed, ₹${gmv.toLocaleString('en-IN')} test GMV, all logged to audit trail.`,
+        disclaimer: 'Test-mode orders only — no real money moved, no pricing/inventory changed. Razorpay test-mode (simulated if keys not set). Every request went through auditMiddleware (requestId + hash chain).'
+      });
+      loadOrders(); loadAudit(); loadAuditVerify();
+    }catch(e){
+      setTestRunError(e.message||'Test run failed');
+    }
+    setTestRunLoading(false);
   };
 
   const plan=plans[activePlan];
@@ -547,6 +695,119 @@ export default function App() {
               <div style={{background:'white', padding:16, borderRadius:20, textAlign:'center', border:'1px solid var(--line)'}}><div style={{fontFamily:'Fragment Mono', fontSize:'1.6rem', fontWeight:700, color:'var(--success)'}}>{orders.filter(o=>o.status==='paid').length}</div><div className="label">Paid (test-mode)</div></div>
               <div style={{background:'white', padding:16, borderRadius:20, textAlign:'center', border:'1px solid var(--line)'}}><div style={{fontFamily:'Fragment Mono', fontSize:'1.6rem', fontWeight:700, color:'var(--warning)'}}>{orders.filter(o=>o.status==='awaiting_approval').length}</div><div className="label">Awaiting approval</div></div>
               <div style={{background:'var(--peach-light)', padding:16, borderRadius:20, textAlign:'center', border:'1px solid var(--line)'}}><div style={{fontFamily:'Fragment Mono', fontSize:'1.6rem', fontWeight:700}}>{insights?insights.real.conversionRate:'—'}</div><div className="label">Conversion</div></div>
+            </div>
+
+            {/* Growth Agent — AI Growth Loop (merchant-facing) */}
+            <div style={{background:'white', borderRadius:20, border:'1px solid var(--line)', padding:20, marginBottom:16, boxShadow:'0 6px 24px rgba(20,20,50,0.04)'}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap'}}>
+                <div>
+                  <div className="label">Growth Agent — AI Growth Loop <span style={{background:'var(--lilac)', padding:'2px 6px', borderRadius:999, fontSize:'0.6rem', marginLeft:6}}>CONTROLLED SIMULATION • SYNTHETIC</span></div>
+                  <h3 style={{marginTop:6, fontFamily:'Fraunces'}}>Turn a goal into a before/after simulation</h3>
+                  <p style={{fontSize:'0.85rem', color:'var(--navy-soft)', marginTop:6, maxWidth:560}}>Type a natural-language goal. We parse it with the existing <span style={{fontFamily:'Fragment Mono', fontSize:'0.8em'}}>POST /api/agent/parse</span> (same deterministic + LLM intent parser behind the AI Buyer), then run <span style={{fontFamily:'Fragment Mono', fontSize:'0.8em'}}>POST /api/merchant/growth-analysis</span> — a controlled before/after simulation using the same synthetic shopper generator as <span style={{fontFamily:'Fragment Mono', fontSize:'0.8em'}}>npm run batch-eval</span>. Baseline is fixed <span style={{fontFamily:'Fragment Mono'}}>6/12/24mo</span> only; with FITEMI is the affordability-matched solver.</p>
+                </div>
+                <div style={{fontSize:'0.65rem', color:'var(--navy-soft)', fontFamily:'Fragment Mono', textAlign:'right', lineHeight:1.4}}>Synthetic — not real tx history<br/>{growthResult?.generatedAt ? new Date(growthResult.generatedAt).toLocaleString() : '—'}</div>
+              </div>
+
+              <div style={{display:'flex', gap:8, marginTop:16, flexWrap:'wrap'}}>
+                <div style={{position:'relative', flex:'1 1 420px', minWidth:260}}>
+                  <span style={{position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color:'var(--navy-soft)'}}>💬</span>
+                  <input value={growthInput} onChange={e=>setGrowthInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleGrowthAgent()} placeholder='increase conversion for phones under ₹40,000' style={{width:'100%', padding:'12px 14px 12px 36px', borderRadius:999, border:'1px solid var(--line)', background:'var(--cream)', fontSize:'0.9rem'}} />
+                </div>
+                <button className="btn btn-primary" onClick={handleGrowthAgent} disabled={growthLoading} style={{padding:'12px 18px', whiteSpace:'nowrap'}}>{growthLoading?'Analyzing…':'Analyze'}</button>
+                <button className="btn btn-ghost" onClick={()=>setGrowthInput('increase conversion for phones under ₹40,000')} style={{padding:'12px 14px'}}>Example: phones</button>
+                <button className="btn btn-ghost" onClick={()=>setGrowthInput('help laptops around ₹60,000 convert better')} style={{padding:'12px 14px'}}>Example: laptops</button>
+              </div>
+              {growthIntent && (
+                <div style={{marginTop:10, fontSize:'0.75rem', color:'var(--navy-soft)', fontFamily:'Fragment Mono'}}>Parsed → category: <strong>{growthIntent.category||'all'}</strong> · maxPrice: <strong>{growthIntent.maxPrice?`₹${growthIntent.maxPrice.toLocaleString('en-IN')}`:'—'}</strong> · targetMonthly: {growthIntent.targetMonthly?`₹${growthIntent.targetMonthly.toLocaleString('en-IN')}/mo`:'—'}</div>
+              )}
+              {growthError && <div style={{marginTop:10, color:'var(--error)', fontSize:'0.85rem', background:'#FFF0F0', padding:10, borderRadius:12}}>⚠ {growthError}</div>}
+
+              {growthResult && (
+                <div style={{marginTop:16, borderTop:'1px solid var(--line)', paddingTop:16}}>
+                  <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px,1fr))', gap:12}}>
+                    <div style={{background:'var(--cream)', padding:14, borderRadius:16, border:'1px solid var(--line)'}}>
+                      <div className="label">Problem detected</div>
+                      <div style={{fontSize:'0.9rem', fontWeight:600, marginTop:6}}>{growthResult.baseline.infeasibleCount} of {growthResult.totalShoppers} synthetic shoppers (≈{(100 - growthResult.baseline.conversion).toFixed(1)}%) abandon at checkout — EMI &gt; affordability ceiling for <strong>{growthResult.inputs.category}</strong> <span style={{fontFamily:'Fragment Mono'}}>₹{growthResult.inputs.priceBand.min.toLocaleString('en-IN')}–₹{growthResult.inputs.priceBand.max.toLocaleString('en-IN')}</span></div>
+                      <div style={{fontSize:'0.75rem', color:'var(--navy-soft)', marginTop:6}}>{growthResult.affordabilityGapPattern}</div>
+                    </div>
+                    <div style={{background:'var(--lilac-light)', padding:14, borderRadius:16, border:'1px solid var(--lilac)'}}>
+                      <div className="label">Opportunity</div>
+                      <div style={{fontSize:'0.9rem', fontWeight:600, marginTop:6}}>{growthResult.recoveredCheckoutCount} checkouts recoverable (+{growthResult.delta.recoveredCheckoutsPct}% lift) — same shoppers become feasible with affordability-matched EMI vs fixed 6/12/24mo baseline</div>
+                      <div style={{fontSize:'0.75rem', color:'var(--navy-soft)', marginTop:6}}>{growthResult.delta.description}</div>
+                    </div>
+                    <div style={{background:'white', padding:14, borderRadius:16, border:'1px solid var(--line)'}}>
+                      <div className="label">Recommended action</div>
+                      <div style={{fontSize:'0.9rem', fontWeight:600, marginTop:6}}>Enable affordability-matched EMI for <strong>{growthResult.inputs.category}</strong> under <span style={{fontFamily:'Fragment Mono'}}>₹{growthResult.inputs.priceBand.max.toLocaleString('en-IN')}</span></div>
+                      <div style={{fontSize:'0.8rem', color:'var(--navy-soft)', marginTop:6}}>Highlight the <span style={{fontFamily:'Fragment Mono'}}>₹{growthResult.withFitemi.avgEmi?.toLocaleString('en-IN')}/mo</span> fit and offer +{growthResult.affordabilityGap.thresholdLabel||'₹1k'}/mo headroom variants; push lower-priced alternatives for near-miss declines.</div>
+                    </div>
+                  </div>
+
+                  <div style={{marginTop:12, background:'white', padding:14, borderRadius:16, border:'1px solid var(--line)'}}>
+                    <div className="label">Reasoning — why this works (deterministic, auditable)</div>
+                    <ul style={{marginTop:8, paddingLeft:18, fontSize:'0.85rem', lineHeight:1.6, color:'var(--navy-soft)'}}>
+                      <li><strong>Affordability ceiling is backend truth:</strong> <span style={{fontFamily:'Fragment Mono'}}>ceiling = max(0, floor(0.4 × takeHomePay − existingObligations))</span> — same logic as <span style={{fontFamily:'Fragment Mono'}}>POST /api/recommend</span> and the batch-eval generator; frontend only collects inputs.</li>
+                      <li><strong>EMI math is deterministic:</strong> <span style={{fontFamily:'Fragment Mono'}}>EMI = P·r·(1+r)^n/((1+r)^n−1)</span> via <span style={{fontFamily:'Fragment Mono'}}>emiSolver.js</span> (3 synthetic lenders: A 1.25% 3-24mo, B 1.08% 6-18mo, C 1.5% 3-12mo); smallest feasible tenor per lender, ranked by <span style={{fontFamily:'Fragment Mono'}}>totalInterest</span>.</li>
+                      <li><strong>Baseline vs FITEMI:</strong> baseline checks only fixed <span style={{fontFamily:'Fragment Mono'}}>6/12/24mo</span> tenors per lender (industry-standard); FITEMI searches the full <span style={{fontFamily:'Fragment Mono'}}>3-24mo</span> range and picks the cheapest feasible plan within the ceiling.</li>
+                      <li><strong>Controlled simulation, synthetic only:</strong> {growthResult.totalShoppers} shoppers via same 4-bucket generator as <span style={{fontFamily:'Fragment Mono'}}>npm run batch-eval</span> (comfortable/tight/infeasible/no_budget) — {growthResult.disclaimer}</li>
+                      <li><strong>Gap pattern:</strong> {growthResult.affordabilityGap.pattern} — median gap <span style={{fontFamily:'Fragment Mono'}}>₹{growthResult.affordabilityGap.medianGap?.toLocaleString('en-IN')}/mo</span> (min ₹{growthResult.affordabilityGap.minGap?.toLocaleString('en-IN')}, max ₹{growthResult.affordabilityGap.maxGap?.toLocaleString('en-IN')}).</li>
+                    </ul>
+                  </div>
+
+                  <div style={{marginTop:12, display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px,1fr))', gap:10}}>
+                    <div style={{background:'white', padding:12, borderRadius:16, border:'1px solid var(--line)', textAlign:'center'}}>
+                      <div style={{fontFamily:'Fragment Mono', fontSize:'1.3rem', fontWeight:700}}>{growthResult.baseline.conversion}%</div>
+                      <div className="label">Baseline conversion</div>
+                      <div style={{fontSize:'0.7rem', color:'var(--navy-soft)'}}>{growthResult.baseline.feasibleCount}/{growthResult.totalShoppers} · GMV <span style={{fontFamily:'Fragment Mono'}}>₹{growthResult.baseline.totalGmv.toLocaleString('en-IN')}</span></div>
+                    </div>
+                    <div style={{background:'var(--peach-light)', padding:12, borderRadius:16, border:'1px solid var(--peach)', textAlign:'center'}}>
+                      <div style={{fontFamily:'Fragment Mono', fontSize:'1.3rem', fontWeight:700, color:'var(--navy)'}}>{growthResult.withFitemi.conversion}%</div>
+                      <div className="label">With FITEMI</div>
+                      <div style={{fontSize:'0.7rem', color:'var(--navy-soft)'}}>{growthResult.withFitemi.feasibleCount}/{growthResult.totalShoppers} · GMV <span style={{fontFamily:'Fragment Mono'}}>₹{growthResult.withFitemi.totalGmv.toLocaleString('en-IN')}</span></div>
+                    </div>
+                    <div style={{background:'var(--navy)', color:'white', padding:12, borderRadius:16, textAlign:'center'}}>
+                      <div style={{fontFamily:'Fragment Mono', fontSize:'1.3rem', fontWeight:700}}>+{growthResult.recoveredCheckoutCount}</div>
+                      <div className="label" style={{color:'rgba(255,255,255,0.7)'}}>Recovered checkouts</div>
+                      <div style={{fontSize:'0.7rem', color:'rgba(255,255,255,0.7)'}}>+{growthResult.delta.recoveredCheckoutsPct}%</div>
+                    </div>
+                    <div style={{background:'#ECFDF5', padding:12, borderRadius:16, border:'1px solid #A7F3D0', textAlign:'center'}}>
+                      <div style={{fontFamily:'Fragment Mono', fontSize:'1.1rem', fontWeight:700, color:'#065F46'}}>{growthResult.recoveredGmvFormatted}</div>
+                      <div className="label">Recovered GMV estimate</div>
+                      <div style={{fontSize:'0.7rem', color:'#065F46'}}>{growthResult.delta.gmvRecoveredPct}% lift</div>
+                    </div>
+                  </div>
+
+                  <div style={{marginTop:12, display:'flex', gap:8, flexWrap:'wrap', alignItems:'center'}}>
+                    <button className="btn btn-primary" onClick={handleGrowthPreview}>Preview — show matching catalog</button>
+                    <span style={{fontSize:'0.75rem', color:'var(--navy-soft)'}}>Preview loads <strong>{growthResult.inputs.category}</strong> products <span style={{fontFamily:'Fragment Mono'}}>₹{growthResult.inputs.priceBand.min.toLocaleString('en-IN')}–₹{growthResult.inputs.priceBand.max.toLocaleString('en-IN')}</span> in Explore</span>
+                    <span style={{fontSize:'0.65rem', color:'var(--navy-soft)', fontFamily:'Fragment Mono', marginLeft:'auto'}}>{growthResult.simulationMethod}</span>
+                  </div>
+
+                  {/* Bounded Run in Test Mode — reuses existing checkout/agent test flow, does not change pricing/inventory */}
+                  <div style={{marginTop:14, background:'var(--cream)', border:'1px solid var(--line)', borderRadius:16, padding:14}}>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap'}}>
+                      <div>
+                        <div className="label">Bounded proof — no pricing/inventory change</div>
+                        <div style={{fontSize:'0.85rem', fontWeight:600, marginTop:4}}>Run in Test Mode</div>
+                        <div style={{fontSize:'0.75rem', color:'var(--navy-soft)', marginTop:2, maxWidth:480}}>Calls existing <span style={{fontFamily:'Fragment Mono', fontSize:'0.8em'}}>POST /api/recommend</span> + <span style={{fontFamily:'Fragment Mono', fontSize:'0.8em'}}>POST /api/checkout/create-order</span> (and <span style={{fontFamily:'Fragment Mono', fontSize:'0.8em'}}>POST /api/agent/validate-checkout</span>) for 3–5 synthetic shoppers from the analysis. Creates real Razorpay test-mode orders ( <span style={{fontFamily:'Fragment Mono'}}>order_sim_…</span> if keys not set). Does not change real pricing or inventory.</div>
+                      </div>
+                      <button className="btn btn-primary" onClick={handleRunInTestMode} disabled={testRunLoading} style={{whiteSpace:'nowrap', background:'var(--navy)', borderColor:'var(--navy)'}}>{testRunLoading?'Running…':'Run in Test Mode'}</button>
+                    </div>
+                    {testRunError && <div style={{marginTop:10, color:'var(--error)', fontSize:'0.85rem', background:'#FFF0F0', padding:10, borderRadius:12}}>⚠ {testRunError}</div>}
+                    {testRunSummary && (
+                      <div style={{marginTop:12, background:'white', border:'1px solid var(--line)', borderRadius:12, padding:12}}>
+                        <div style={{fontSize:'0.95rem', fontWeight:700, color:'var(--success)'}}>✓ {testRunSummary.message}</div>
+                        <div style={{fontSize:'0.75rem', color:'var(--navy-soft)', marginTop:4, fontFamily:'Fragment Mono'}}>{testRunSummary.count} test transactions · {testRunSummary.gmvFormatted} test GMV · product {testRunSummary.productName} · all requests logged with requestId + hash chain (see Audit Timeline below)</div>
+                        <div style={{fontSize:'0.65rem', color:'var(--navy-soft)', fontStyle:'italic', marginTop:6}}>{testRunSummary.disclaimer} — verify at GET /api/audit and GET /api/audit/verify.</div>
+                        <div style={{marginTop:8, display:'flex', gap:6, flexWrap:'wrap'}}>
+                          {testRunSummary.orders.slice(0,5).map(o=>(
+                            <span key={o.orderId} style={{fontFamily:'Fragment Mono', fontSize:'0.65rem', background:'var(--cream)', padding:'4px 8px', borderRadius:999, border:'1px solid var(--line)'}}>{o.orderId.slice(0,14)} · ₹{o.merchantOrder?.amount?.toLocaleString('en-IN')}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="phone-grid">

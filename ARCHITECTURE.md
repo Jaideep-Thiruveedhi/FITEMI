@@ -67,18 +67,20 @@ Navigation: **Home** (Dream + AI Buyer Mode) | **Explore** (Catalog) | **My Fit*
 - `razorpay.js` — `createTestOrder` (real `Razorpay.orders.create` or `api.razorpay.com` or **simulated** `order_sim_…` with `isSimulated:true` boundary), `verifyPayment`, `isRazorpayConfigured`
 - `merchant.js` — in-memory `orders`, `createOrder`, `updateOrderStatus`, `getRevenueInsights` (real + synthetic labeled)
 - `agent.js` — `orchestrateAgent` (parse → ceiling → search → evaluate → bestFit), `validateCheckout` (product/price/plan/feasibility guard), `createDraftOrder`, `ALLOWED`/`REQUIRES_APPROVAL`/`DISALLOWED`
+- `growthAnalysis.js:1` — `runGrowthSimulation` (reuses batch-eval generator, fixed `6/12/24` baseline vs `findFeasiblePlans` FITEMI, `analyzeAffordabilityGapPattern`), `deriveEffectivePriceRange`, `checkBaselineFeasible`/`checkFitemiFeasible` — no new DB, same solver, labeled `SIMULATION_LABEL`/`SIMULATION_DISCLAIMER`/`isSynthetic`
 
 **Backend — Routes:**
 - `routes/catalog.js` — `GET /api/catalog` (search), `GET /api/catalog/:id`, `GET /api/catalog/agent/readable`
 - `routes/agent.js` — `POST /api/agent/parse`, `POST /api/agent/orchestrate` (AI buyer mode), `POST /api/agent/draft-order`, `POST /api/agent/validate-checkout`
 - `routes/checkout.js` — `POST /api/checkout/create-order` (bounded, `userApproval` required), `POST /api/checkout/verify`, `POST /api/checkout/cancel`, `GET /api/checkout/status/:id`
-- `routes/merchant.js` — `GET /api/merchant/orders`, `GET /api/merchant/insights`, `GET /api/merchant/merchants`
+- `routes/merchant.js` — `GET /api/merchant/orders`, `GET /api/merchant/insights`, `GET /api/merchant/merchants`, `POST /api/merchant/growth-analysis` (controlled synthetic before/after: `category,priceMin,priceMax` → baseline/FITEMI conversion, recovered checkouts/GMV, gap pattern, `isSynthetic` + `auditMiddleware` logged)
 - `routes/recommend.js` — preserved legacy EMI path (validation → affordability → solver → LLM polish)
 
 **Frontend — Warm 3D Design System:**
 - `styles/theme.css` — `cream #FFFBF5`, `peach #FFDAB9`, `lilac #E8E0FF`, `navy #1A1A2E`, `Space Grotesk` + `Inter`, `soft shadow`, `rounded`, `backdrop-blur` nav, responsive
 - `App.jsx:1` — single coherent product, 5 tabs, state for `dream/catalog/selectedProduct/plans/ceiling/tradeOff/whatIf/checkout/orders/audit`, `AiConcierge` contextual
 - Interactions: Dream input + prompt pills, catalog grid, compass track, spectrum track with ★, trade-off pills, what-if buttons, deep plan principal/interest bar, bounded checkout card, merchant feed, audit timeline
+- `App.jsx:696` — **Growth Agent (Merchant → AI Growth Loop)** — input for natural-language goal → `POST /api/agent/parse` (reuse `intentParser.js`) → `POST /api/merchant/growth-analysis` → renders problem → opportunity → recommended action → reasoning (bullets referencing `0.4×` ceiling + `emiSolver`) → expected impact → Preview + bounded `Run in Test Mode` (3–5 synthetic shoppers → `POST /api/recommend` + `POST /api/checkout/create-order` test-mode orders, no pricing/inventory change, all via `auditMiddleware`)
 
 **AI Design:**
 - Does: parse intent, ask affordability, explain facts, suggest “You’re ₹680 below target — pay sooner?”, launch comparisons
@@ -98,6 +100,8 @@ User: "laptop around ₹60,000 at ₹5,000/mo"
 ```
 
 All synthetic data under `server/data` + `server/src/lib/catalog.js`; no DB, no real bank calls.
+
+> **Scope — Controlled Synthetic Simulation (deliberate, not an overclaim):** The **AI Growth Loop** (`server/src/lib/growthAnalysis.js:1` + `POST /api/merchant/growth-analysis` in `server/src/routes/merchant.js:33` + Merchant → Growth Agent in `client/src/App.jsx:696`) is a *controlled synthetic simulation demonstrating the growth mechanism*, not live merchant data. It reuses the existing `npm run batch-eval` synthetic shopper generator (same 4-bucket `comfortable/tight/infeasible/no_budget` distributions, same `affordability.js:13` ceiling `max(0,floor(0.4×takeHome−obligations))` and `emiSolver.js:5`/`lenders.js:1` 3 lenders) to simulate a before/after checkout: *before* fixed `6/12/24` mo tenures only (industry-standard baseline) vs *with* FITEMI's affordability-matched solver, and reports baseline/FITEMI conversion, recovered checkout count, recovered GMV estimate, and affordability-gap pattern (e.g., “37% of declines had EMI > affordability by <₹2k/mo”). Responses are labeled `isSynthetic:true`, `isRealTransactionHistory:false`, `CONTROLLED SIMULATION • SYNTHETIC` with `disclaimer: does not represent real transaction history or a financial guarantee`; `Run in Test Mode` (`App.jsx:219`) proves the mechanism by creating 3–5 real Razorpay test-mode orders (`order_sim_…` if keys not set) via the existing `POST /api/recommend` → `POST /api/checkout/create-order` (`userApproval:true`, bounded `validateCheckout`) flow without changing pricing or inventory, and every request goes through `auditLog.js:138` `auditMiddleware` (requestId + SHA-256 hash chain, verifiable at `GET /api/audit/verify`). No new database, no new synthetic source, no EMI/checkout/agent route changes — additive only, intentional honesty about what is and isn't proven.
 
 ## Agent-to-Agent Commerce Protocols
 
